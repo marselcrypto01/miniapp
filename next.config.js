@@ -1,16 +1,18 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Чтобы ESLint/TS-ошибки не падали на прод-сборке
-  eslint: { ignoreDuringBuilds: true },
-  typescript: { ignoreBuildErrors: true },
-
-  // Cloudflare Pages нормально работает с обычным next build
-  // (Turbopack оставим для локалки)
-  experimental: {
-    typedRoutes: false
+  // Полностью пропускаем ESLint на сборке
+  eslint: {
+    ignoreDuringBuilds: true,
   },
-
-  output: 'standalone'
+  // Игнорим ошибки TypeScript на сборке (код всё равно скомпилится)
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  // Дополнительно: не останавливать сборку из-за ошибок компилятора
+  // (опционально, но помогает в спорных кейсах)
+  experimental: {
+    // Ничего критичного: оставим Turbopack по умолчанию
+  },
 };
 
 module.exports = nextConfig;

@@ -1,123 +1,119 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 
-export type PresencePage = 'home' | 'lesson' | 'admin';
+/** ===== Типы (то, что нужно админке) ===== */
+export type PresenceSession = {
+  uid: string;
+  username?: string | null;
+  page: string;            // 'home' | 'lesson' | 'admin' | ...
+  activity?: string | null;
+  lessonId?: number;
+  progressPct?: number;
+  isOnline: boolean;
+  updatedAt: number;       // ms
+};
 
 export type PresenceProps = {
-  page: PresencePage;
+  page: string;
   activity?: string;
   lessonId?: number;
   progressPct?: number;
 };
 
-export type PresenceSession = {
-  uid: string;                // уникальный id вкладки/пользователя
-  username?: string;          // тг-ник, если есть
-  page: PresencePage;         // 'home' | 'lesson' | 'admin'
-  activity?: string;          // произв. описание
-  lessonId?: number;          // для уроков
-  progressPct?: number;       // % прогресса (для главной)
-  isOnline: boolean;          // онлайн/оффлайн
-  updatedAt: number;          // ms timestamp
-};
+/** ===== Ключи в localStorage ===== */
+const STORE_KEY = 'presence_store';
+const UID_KEY = 'presence_uid';
 
-// внутреннее хранилище (в localStorage объект: { [uid]: PresenceSession })
-type PresenceStore = Record<string, PresenceSession>;
-
-const STORE_KEY = 'presence_store_v1';
-const UID_KEY   = 'presence_uid_v1';
-
-// ---------- helpers ----------
-function getOrCreateUid(): string {
+/** Безопасное чтение из LS */
+function safeParse<T>(raw: string | null, fallback: T): T {
   try {
-    let uid = sessionStorage.getItem(UID_KEY);
-    if (!uid) {
-      uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      sessionStorage.setItem(UID_KEY, uid);
-    }
-    return uid;
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
   } catch {
-    // если sessionStorage недоступен
-    return Math.random().toString(36).slice(2) + Date.now().toString(36);
+    return fallback;
   }
 }
 
-function writePresence(entry: PresenceSession) {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    const store: PresenceStore = raw ? JSON.parse(raw) : {};
-    store[entry.uid] = entry;
-    localStorage.setItem(STORE_KEY, JSON.stringify(store));
-  } catch {}
+/** Сгенерировать/получить uid браузера */
+function getUid(): string {
+  let uid = localStorage.getItem(UID_KEY);
+  if (!uid) {
+    uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try { localStorage.setItem(UID_KEY, uid); } catch {}
+  }
+  return uid;
 }
 
+/** Прочитать все сессии (используется в админке) */
 export function readPresenceStore(): PresenceSession[] {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (!raw) return [];
-    const store: PresenceStore = JSON.parse(raw);
-    return Object.values(store).sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch {
-    return [];
+  if (typeof window === 'undefined') return [];
+  const arr = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
+  // лёгкая чистка мусора (оставим последние записи по uid)
+  const byUid = new Map<string, PresenceSession>();
+  for (const s of Array.isArray(arr) ? arr : []) {
+    const prev = byUid.get(s.uid);
+    if (!prev || (s.updatedAt ?? 0) > (prev.updatedAt ?? 0)) byUid.set(s.uid, s);
   }
+  return [...byUid.values()];
 }
 
-// ---------- компонент ----------
+/** Записать/обновить свою сессию */
+function upsertSession(partial: Partial<PresenceSession>) {
+  const uid = getUid();
+  const list = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
+  const meIdx = list.findIndex((x) => x.uid === uid);
+  const username =
+    (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
+
+  const next: PresenceSession = {
+    uid,
+    username,
+    page: partial.page ?? (list[meIdx]?.page ?? 'unknown'),
+    activity: partial.activity ?? list[meIdx]?.activity ?? null,
+    lessonId: partial.lessonId ?? list[meIdx]?.lessonId,
+    progressPct: partial.progressPct ?? list[meIdx]?.progressPct,
+    isOnline: partial.isOnline ?? true,
+    updatedAt: Date.now(),
+  };
+
+  if (meIdx >= 0) list[meIdx] = next;
+  else list.push(next);
+
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch {}
+}
+
+/** Клиентский компонент, который «пингует» админке наше состояние */
 export default function PresenceClient({
   page,
   activity,
   lessonId,
   progressPct,
 }: PresenceProps) {
-  const uid = useMemo(() => getOrCreateUid(), []);
-  const username: string | undefined = (globalThis as any)?.Telegram?.WebApp
-    ?.initDataUnsafe?.user?.username;
+  const timer = useRef<number | null>(null);
 
   useEffect(() => {
-    // первичная запись
-    const entry: PresenceSession = {
-      uid,
-      username,
-      page,
-      activity,
-      lessonId,
-      progressPct,
-      isOnline: true,
-      updatedAt: Date.now(),
+    // первая запись
+    upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
+
+    // пинги раз в 15 сек
+    timer.current = window.setInterval(() => {
+      upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
+    }, 15000);
+
+    // при размонтировании/уходе — отметим оффлайн
+    const handleUnload = () => {
+      upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
     };
-    writePresence(entry);
+    window.addEventListener('beforeunload', handleUnload);
 
-    // каждые 4 сек обновляем "живость"
-    const t = setInterval(() => {
-      writePresence({
-        ...entry,
-        activity,
-        lessonId,
-        progressPct,
-        isOnline: true,
-        updatedAt: Date.now(),
-      });
-    }, 4000);
-
-    const onUnload = () => {
-      writePresence({
-        ...entry,
-        activity,
-        lessonId,
-        progressPct,
-        isOnline: false,
-        updatedAt: Date.now(),
-      });
-    };
-
-    window.addEventListener('beforeunload', onUnload);
     return () => {
-      clearInterval(t);
-      onUnload();
-      window.removeEventListener('beforeunload', onUnload);
+      if (timer.current) window.clearInterval(timer.current);
+      window.removeEventListener('beforeunload', handleUnload);
+      upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
     };
-  }, [uid, username, page, activity, lessonId, progressPct]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, activity, lessonId, progressPct]);
 
   return null;
 }

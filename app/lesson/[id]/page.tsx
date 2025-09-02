@@ -1,179 +1,178 @@
 'use client';
 
-import React, { useEffect, useMemo, useState, use as usePromise } from 'react';
+import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
-import { CORE_LESSON_COUNT, getLessonById } from '@/lib/lessons';
+import { getLessonById } from '@/lib/lessons';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
+type TabKey = 'desc' | 'test' | 'materials';
 
-export default function LessonPage(props: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
-
-  // В Next 15 params — это Promise, разворачиваем через React.use()
-  const { id } = usePromise(props.params);
+export default function LessonPage({ params }: { params: Promise<{ id: string }> }) {
+  // Next.js 15: params — Promise, достаём через React.use()
+  const { id } = use(params);
   const idNum = Number(id);
+  const meta = getLessonById(idNum);
 
-  // хуки ВСЕГДА сверху (чтобы не было ошибки «hooks called conditionally»)
-  const [tab, setTab] = useState<'desc' | 'test' | 'materials'>('desc');
-  const [progress, setProgress] = useState<Progress[]>([]);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('progress');
-      if (saved) setProgress(JSON.parse(saved));
-    } catch {}
-  }, []);
-
-  const isCompleted = useMemo(
-    () => progress.find((p) => p.lesson_id === idNum)?.status === 'completed',
-    [progress, idNum]
+  const hasTest = !!meta?.hasTest;
+  const tabs = useMemo<TabKey[]>(
+    () => (hasTest ? ['desc', 'test', 'materials'] : ['desc', 'materials']),
+    [hasTest]
   );
 
+  const [tab, setTab] = useState<TabKey>('desc');
+  const [progress, setProgress] = useState<Progress[]>([]);
+
+  // ---------- строгое чтение прогресса из localStorage ----------
+  function readProgress(): Progress[] {
+    try {
+      const raw = localStorage.getItem('progress');
+      if (!raw) return [];
+      const arr = JSON.parse(raw) as unknown;
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map((r: any): Progress | null => {
+          const lesson_id = Number(r?.lesson_id);
+          const status: Progress['status'] =
+            r?.status === 'completed' ? 'completed' : 'pending';
+          return Number.isFinite(lesson_id) ? { lesson_id, status } : null;
+        })
+        .filter(Boolean) as Progress[];
+    } catch {
+      return [];
+    }
+  }
+
+  useEffect(() => {
+    setProgress(readProgress());
+  }, []);
+
+  // отметить как пройдено (с явной типизацией результата)
   const markCompleted = () => {
-    setProgress((prev) => {
+    setProgress((prev): Progress[] => {
       const exists = prev.find((p) => p.lesson_id === idNum);
-      const next = exists
-        ? prev.map((p) => (p.lesson_id === idNum ? { ...p, status: 'completed' } : p))
+      const next: Progress[] = exists
+        ? prev.map((p): Progress =>
+            p.lesson_id === idNum ? { ...p, status: 'completed' } as Progress : p
+          )
         : [...prev, { lesson_id: idNum, status: 'completed' }];
 
       try {
         localStorage.setItem('progress', JSON.stringify(next));
-        const coreCompleted = next.filter(
-          (p) => p.status === 'completed' && p.lesson_id <= CORE_LESSON_COUNT
-        ).length;
-        localStorage.setItem(
-          'all_completed',
-          coreCompleted >= CORE_LESSON_COUNT ? 'true' : 'false'
-        );
       } catch {}
       return next;
     });
-    alert('✅ Урок отмечен как пройденный');
   };
 
-  const lesson = getLessonById(idNum);
+  const isCompleted = progress.some(
+    (p) => p.lesson_id === idNum && p.status === 'completed'
+  );
+
+  // соседние уроки
   const prevId = idNum > 1 ? idNum - 1 : null;
   const nextId = idNum < 6 ? idNum + 1 : null;
 
-  if (!lesson || Number.isNaN(idNum)) {
+  if (!meta) {
     return (
-      <main className="mx-auto max-w-xl px-4 py-5">
-        <h1 className="text-2xl font-bold">Урок не найден</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Проверь номер урока.</p>
-        <Link href="/" className="btn-brand mt-4 inline-block">← На главную</Link>
+      <main className="mx-auto max-w-xl px-4 py-8">
+        <div className="glass rounded-xl p-6">Урок не найден</div>
       </main>
     );
   }
 
   return (
     <main className="mx-auto max-w-xl px-4 py-5">
-      <PresenceClient page="lesson" lessonId={idNum} activity={`Урок #${idNum} | вкладка: ${tab}`} />
+      <PresenceClient
+        page="lesson"
+        lessonId={idNum}
+        activity={`Урок #${idNum} | вкладка: ${tab}`}
+      />
 
-      <div className="mb-3 flex items-start justify-between">
-        <div className="flex items-center gap-3">
+      <div className="mb-3 flex items-center justify-between">
+        <Link href="/" className="btn--outline">← Назад</Link>
+        <div className="text-xl font-extrabold">{meta.title}</div>
+        <Link href="/" className="text-sm text-[var(--muted)]">На главную</Link>
+      </div>
+
+      {/* Заглушка под видео */}
+      <div className="glass rounded-xl p-6 text-center">
+        <div className="text-lg font-semibold">🎬 Видео-урок #{idNum}</div>
+        <div className="mt-2 text-sm text-[var(--muted)]">
+          Здесь будет встроенный плеер (YouTube/Vimeo/файл)
+        </div>
+      </div>
+
+      {/* Табы */}
+      <div className="mt-3 flex gap-2">
+        {tabs.map((t) => (
           <button
-            onClick={() => router.back()}
-            className="rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm"
+            key={t}
+            className={`tab ${tab === t ? 'tab--active' : ''}`}
+            onClick={() => setTab(t)}
           >
-            ← Назад
+            {t === 'desc' && '📝 Описание'}
+            {t === 'test' && '✅ Тест'}
+            {t === 'materials' && '📎 Материалы'}
           </button>
-          <div>
-            <h1 className="text-2xl font-extrabold tracking-tight">{lesson.title}</h1>
-            {lesson.subtitle && (
-              <div className="mt-1 text-sm text-[var(--muted)]">{lesson.subtitle}</div>
-            )}
+        ))}
+      </div>
+
+      {/* Контент вкладок */}
+      <div className="mt-3 glass rounded-xl p-4">
+        {tab === 'desc' && (
+          <div className="space-y-2">
+            <div className="text-sm text-[var(--muted)]">
+              {meta.description || 'Описание урока'}
+            </div>
+            <ul className="list-disc pl-5 text-sm">
+              <li>Главная идея урока</li>
+              <li>3–5 ключевых тезисов</li>
+              <li>Что сделать после просмотра</li>
+            </ul>
           </div>
-        </div>
-
-        <Link href="/" className="text-sm text-[var(--muted)] hover:underline">
-          На главную
-        </Link>
-      </div>
-
-      <div className="glass overflow-hidden rounded-[18px]">
-        <div className="aspect-video grid place-items-center text-[var(--muted)]">
-          <div className="text-center">
-            <div className="text-lg font-semibold">🎬 Видео-урок #{idNum}</div>
-            <div className="mt-1 text-sm">Здесь будет встроенный плеер (YouTube/Vimeo/файл)</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4">
-        <div className="tabs">
-          <button className={`tab ${tab === 'desc' ? 'tab--active' : ''}`} onClick={() => setTab('desc')}>
-            📝 Описание
-          </button>
-          {lesson.hasTest && (
-            <button className={`tab ${tab === 'test' ? 'tab--active' : ''}`} onClick={() => setTab('test')}>
-              ✅ Тест
-            </button>
-          )}
-          <button
-            className={`tab ${tab === 'materials' ? 'tab--active' : ''}`}
-            onClick={() => setTab('materials')}
-          >
-            📎 Материалы
-          </button>
-        </div>
-
-        <div className="mt-3 glass rounded-[18px] p-4">
-          {tab === 'desc' && (
-            <div className="space-y-2 text-sm text-[var(--muted)]">
-              <p>{lesson.description || `Краткое описание урока #${idNum}.`}</p>
-              <ul className="list-disc pl-5">
-                <li>Главная идея урока</li>
-                <li>3–5 ключевых тезисов</li>
-                <li>Что сделать после просмотра</li>
-              </ul>
-            </div>
-          )}
-
-          {tab === 'test' && lesson.hasTest && (
-            <div className="space-y-2 text-sm text-[var(--muted)]">
-              <p>Мини-тест по уроку #{idNum}. Пока заглушка:</p>
-              <ol className="list-decimal pl-5">
-                <li>Вопрос 1 — вариант А/Б/В</li>
-                <li>Вопрос 2 — вариант А/Б/В</li>
-                <li>Вопрос 3 — вариант А/Б/В</li>
-              </ol>
-              <button className="btn-brand mt-2" onClick={() => alert('Тест — заглушка.')}>
-                Отправить ответы
-              </button>
-            </div>
-          )}
-
-          {tab === 'materials' && (
-            <div className="space-y-2 text-sm text-[var(--muted)]">
-              <p>Полезные материалы к уроку #{idNum}:</p>
-              <ul className="list-disc pl-5">
-                <li>PDF/чек-лист — заглушка</li>
-                <li>Ссылки на сервисы — заглушка</li>
-                <li>Шаблоны — заглушка</li>
-              </ul>
-              <button className="btn-brand mt-2" onClick={() => alert('Откроем материалы в боте')}>
-                Открыть в боте
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {!isCompleted ? (
-          <button className="btn-brand" onClick={markCompleted}>Отметить как пройдено</button>
-        ) : (
-          <button className="btn-brand cursor-default opacity-80" disabled>Пройдено</button>
         )}
 
-        {prevId && <button className="btn" onClick={() => router.push(`/lesson/${prevId}`)}>← Предыдущий</button>}
-        {nextId && <button className="btn" onClick={() => router.push(`/lesson/${nextId}`)}>Следующий →</button>}
-        <button className="btn" onClick={() => router.push('/')}>К списку уроков</button>
+        {tab === 'test' && hasTest && (
+          <div className="space-y-2">
+            <div className="text-sm text-[var(--muted)]">Мини-тест (заглушка)</div>
+            <button className="btn-brand" onClick={markCompleted}>
+              Отметить как пройдено
+            </button>
+          </div>
+        )}
+
+        {tab === 'materials' && (
+          <div className="text-sm text-[var(--muted)]">
+            Ссылки, чек-листы, PDF — добавим позже
+          </div>
+        )}
       </div>
 
-      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
+      {/* Навигация */}
+      <div className="mt-4 flex items-center justify-between">
+        <Link href="/" className="btn--ghost">К списку уроков</Link>
+
+        <div className="flex gap-2">
+          {prevId && (
+            <Link className="btn--outline" href={`/lesson/${prevId}`}>
+              ← Предыдущий
+            </Link>
+          )}
+          {nextId && (
+            <Link className="btn" href={`/lesson/${nextId}`}>
+              Следующий →
+            </Link>
+          )}
+        </div>
+
+        <button
+          className={`btn ${isCompleted ? 'opacity-70 cursor-default' : ''}`}
+          onClick={markCompleted}
+          disabled={isCompleted}
+        >
+          {isCompleted ? 'Пройдено' : 'Отметить пройдено'}
+        </button>
+      </div>
     </main>
   );
 }

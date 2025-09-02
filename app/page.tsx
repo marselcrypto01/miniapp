@@ -27,20 +27,14 @@ const QUOTES = [
 
 // ===== Уровни (без перков) =====
 type LevelKey = 'novice' | 'bronze' | 'silver' | 'gold';
-const LEVELS: Record<
-  LevelKey,
-  { title: string; threshold: number; icon: string }
-> = {
+const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
   bronze: { title: 'Бронза', threshold: 40, icon: '🥉' },
   silver: { title: 'Серебро', threshold: 80, icon: '🥈' },
   gold: { title: 'Золото', threshold: 120, icon: '🥇' },
 };
 
-function computeXP(
-  completedCount: number,
-  ach: Record<AchievementKey, boolean>
-) {
+function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
   let xp = completedCount * 20; // 5 уроков → 100 XP
   if (ach.first) xp += 5;
   if (ach.risk) xp += 5;
@@ -48,11 +42,7 @@ function computeXP(
   if (ach.finisher) xp += 10;
   return xp;
 }
-function computeLevel(xp: number): {
-  key: LevelKey;
-  nextAt: number | null;
-  progressPct: number;
-} {
+function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progressPct: number } {
   const order: LevelKey[] = ['novice', 'bronze', 'silver', 'gold'];
   let current: LevelKey = 'novice';
   for (const k of order) if (xp >= LEVELS[k].threshold) current = k;
@@ -61,17 +51,13 @@ function computeLevel(xp: number): {
   if (!next) return { key: current, nextAt: null, progressPct: 100 };
   const from = LEVELS[current].threshold;
   const to = LEVELS[next].threshold;
-  const pct = Math.max(
-    0,
-    Math.min(100, Math.round(((xp - from) / (to - from)) * 100))
-  );
+  const pct = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
   return { key: current, nextAt: to, progressPct: pct };
 }
 
 export default function Home() {
   const router = useRouter();
 
-  const [initData, setInitData] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [isTelegram, setIsTelegram] = useState(true);
 
@@ -79,13 +65,12 @@ export default function Home() {
   const [points, setPoints] = useState<number>(610);
   const [quote, setQuote] = useState<string>('');
 
-  const [achievements, setAchievements] =
-    useState<Record<AchievementKey, boolean>>({
-      first: false,
-      risk: false,
-      finisher: false,
-      simulator: false,
-    });
+  const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
+    first: false,
+    risk: false,
+    finisher: false,
+    simulator: false,
+  });
 
   const [allCompleted, setAllCompleted] = useState(false);
 
@@ -96,11 +81,7 @@ export default function Home() {
       { id: 3, title: 'Риски, мифы и страхи' },
       { id: 4, title: 'Главные ошибки новичков' },
       { id: 5, title: 'Итог: как двигаться дальше' },
-      {
-        id: 6,
-        title: 'Дополнительная полезная информация',
-        subtitle: 'Чек-листы, шпаргалки, ссылки…',
-      },
+      { id: 6, title: 'Дополнительная полезная информация', subtitle: 'Чек-листы, шпаргалки, ссылки…' },
     ],
     []
   );
@@ -108,26 +89,28 @@ export default function Home() {
   // Telegram / демо-режим
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const demo =
-      params.get('demo') === '1' || process.env.NODE_ENV === 'development';
+    const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
     const tg = (window as any)?.Telegram?.WebApp;
 
     if (!tg) {
       if (demo) {
         setIsTelegram(true);
         setUsername('user');
-        setInitData(null);
       } else {
         setIsTelegram(false);
       }
       return;
     }
 
-    tg.expand();
-    tg.ready();
-    setInitData(tg.initData || '');
-    setUsername(tg.initDataUnsafe?.user?.username || null);
-    setIsTelegram(true);
+    try {
+      tg.expand();
+      tg.ready();
+      setUsername(tg.initDataUnsafe?.user?.username || null);
+      setIsTelegram(true);
+    } catch {
+      setIsTelegram(demo);
+      if (demo) setUsername('user');
+    }
   }, []);
 
   // Цитата дня (учитываем админские в localStorage)
@@ -150,7 +133,9 @@ export default function Home() {
       if (saved) setProgress(JSON.parse(saved));
       if (ach) setAchievements(JSON.parse(ach));
       setAllCompleted(all);
-    } catch {}
+    } catch {
+      // ignore
+    }
   }, []);
 
   // Вспомогательные вычисления
@@ -158,13 +143,8 @@ export default function Home() {
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
   const coreLessonsCount = 5;
-  const completedCount = progress.filter(
-    (p) => p.status === 'completed' && p.lesson_id <= 5
-  ).length;
-  const bar = Math.min(
-    100,
-    Math.round((completedCount / coreLessonsCount) * 100)
-  );
+  const completedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= 5).length;
+  const bar = Math.min(100, Math.round((completedCount / coreLessonsCount) * 100));
 
   // Авто-ачивки и сохранение
   useEffect(() => {
@@ -190,14 +170,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress]);
 
-  // «Отметить как пройдено» (оставляем как демо на главной, но основной флоу — на странице урока)
+  // «Отметить как пройдено» (демо на главной; основной флоу — на странице урока)
   const complete = (lessonId: number) => {
     setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === lessonId);
       return exists
-        ? prev.map((p) =>
-            p.lesson_id === lessonId ? { ...p, status: 'completed' } : p
-          )
+        ? prev.map((p) => (p.lesson_id === lessonId ? { ...p, status: 'completed' } : p))
         : [...prev, { lesson_id: lessonId, status: 'completed' }];
     });
     setPoints((x) => x + 10);
@@ -210,42 +188,12 @@ export default function Home() {
 
   // Метки ачивок над полосой
   const markers = [
-    {
-      key: 'first',
-      at: 20,
-      icon: '💸',
-      title: 'Первый арбитраж (после 1 урока)',
-      achieved: achievements.first,
-    },
-    {
-      key: 'fast',
-      at: 60,
-      icon: '⚡',
-      title: 'Быстрый старт (3 урока)',
-      achieved: completedCount >= 3,
-    },
-    {
-      key: 'risk',
-      at: 60,
-      icon: '🛡️',
-      title: 'Холодная голова (урок 3)',
-      achieved: achievements.risk,
-    },
-    {
-      key: 'fin',
-      at: 100,
-      icon: '🚀',
-      title: 'Финалист (все уроки)',
-      achieved: achievements.finisher,
-    },
-    {
-      key: 'sim',
-      at: 100,
-      icon: '📊',
-      title: 'Симуляторщик (калькулятор)',
-      achieved: achievements.simulator,
-    },
-  ];
+    { key: 'first', at: 20, icon: '💸', title: 'Первый арбитраж (после 1 урока)', achieved: achievements.first },
+    { key: 'fast', at: 60, icon: '⚡', title: 'Быстрый старт (3 урока)', achieved: completedCount >= 3 },
+    { key: 'risk', at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)', achieved: achievements.risk },
+    { key: 'fin', at: 100, icon: '🚀', title: 'Финалист (все уроки)', achieved: achievements.finisher },
+    { key: 'sim', at: 100, icon: '📊', title: 'Симуляторщик (калькулятор)', achieved: achievements.simulator },
+  ] as const;
 
   if (!isTelegram) {
     return (
@@ -283,18 +231,13 @@ export default function Home() {
             <span className="text-sm font-semibold">{level.title}</span>
           </div>
           <div className="w-28 h-1 rounded bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
-            <div
-              className="h-full bg-[var(--brand)]"
-              style={{ width: `${progressPct}%` }}
-            />
+            <div className="h-full bg-[var(--brand)]" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
       </div>
 
       {/* Приветствие + цитата */}
-      <p className="text-sm text-[var(--muted)]">
-        Привет, @{username || 'user'}!
-      </p>
+      <p className="text-sm text-[var(--muted)]">Привет, @{username || 'user'}!</p>
       <p className="mt-1 mb-2 text-sm italic text-[var(--muted)]">💡 {quote}</p>
 
       {/* Статус-бар: метки → полоса → подписи */}
@@ -304,16 +247,12 @@ export default function Home() {
             <span
               key={m.key}
               title={m.title}
-              className={`absolute -translate-x-1/2 grid place-items-center w-7 h-7 rounded-full text-[13px] ${
-                m.achieved ? '' : 'opacity-45'
-              }`}
+              className={`absolute -translate-x-1/2 grid place-items-center w-7 h-7 rounded-full text-[13px] ${m.achieved ? '' : 'opacity-45'}`}
               style={{
                 left: `${m.at}%`,
                 top: 0,
-                background:
-                  'color-mix(in oklab, var(--brand-200) 30%, transparent)',
-                border:
-                  '1px solid color-mix(in oklab, var(--brand) 50%, var(--border))',
+                background: 'color-mix(in oklab, var(--brand-200) 30%, transparent)',
+                border: '1px solid color-mix(in oklab, var(--brand) 50%, var(--border))',
                 boxShadow: 'var(--shadow)',
               }}
             >
@@ -327,12 +266,8 @@ export default function Home() {
         </div>
 
         <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-          <span>
-            Пройдено: {completedCount}/{coreLessonsCount}
-          </span>
-          <span>
-            Осталось: {Math.max(0, coreLessonsCount - completedCount)}
-          </span>
+          <span>Пройдено: {completedCount}/{coreLessonsCount}</span>
+          <span>Осталось: {Math.max(0, coreLessonsCount - completedCount)}</span>
         </div>
       </div>
 
@@ -352,11 +287,7 @@ export default function Home() {
                   </div>
                   <div>
                     <div className="text-[17px] font-semibold">{l.title}</div>
-                    {l.subtitle && (
-                      <div className="text-sm text-[var(--muted)]">
-                        {l.subtitle}
-                      </div>
-                    )}
+                    {l.subtitle && <div className="text-sm text-[var(--muted)]">{l.subtitle}</div>}
                   </div>
                 </div>
 
@@ -366,22 +297,17 @@ export default function Home() {
               </div>
 
               <div className="mt-3 flex items-center gap-3">
-                {/* Всегда ведём на страницу урока.
-                   6-й модуль (материалы) блокируем до прохождения 1–5. */}
+                {/* Всегда ведём на страницу урока. 6-й модуль (материалы) блокируем до прохождения 1–5. */}
                 <button
                   className="btn-brand"
                   onClick={() => router.push(`/lesson/${l.id}`)}
                   disabled={lockedExtra}
-                  title={
-                    lockedExtra
-                      ? 'Откроется после прохождения всех уроков'
-                      : 'Открыть урок'
-                  }
+                  title={lockedExtra ? 'Откроется после прохождения всех уроков' : 'Открыть урок'}
                 >
                   {lockedExtra ? 'Закрыто' : 'Смотреть'}
                 </button>
 
-                {/* Доп. демо-кнопка «Отметить как пройдено» (по желанию оставь/убери) */}
+                {/* Доп. демо-кнопка «Отметить как пройдено» */}
                 {!done && l.id !== 6 && (
                   <button className="btn" onClick={() => complete(l.id)}>
                     Отметить как пройдено
@@ -397,22 +323,10 @@ export default function Home() {
       <h2 className="mt-6 text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[
-          {
-            q: 'А что если карту заблокируют?',
-            a: 'Есть методы подготовки карт и распределения лимитов. Это часть арбитража — учимся обходить риски.',
-          },
-          {
-            q: 'Сколько можно зарабатывать?',
-            a: 'В среднем ученики начинают с +70k в месяц, но всё зависит от времени и капитала.',
-          },
-          {
-            q: 'А если я ничего не понимаю в крипте?',
-            a: 'Курс построен для новичков: от простого к сложному. Разберётся любой.',
-          },
-          {
-            q: 'Почему арбитраж лучше трейдинга?',
-            a: 'Тут меньше рисков и нет зависимости от графиков. Зарабатываешь на разнице курсов.',
-          },
+          { q: 'А что если карту заблокируют?', a: 'Есть методы подготовки карт и распределения лимитов. Это часть арбитража — учимся обходить риски.' },
+          { q: 'Сколько можно зарабатывать?', a: 'В среднем ученики начинают с +70k в месяц, но всё зависит от времени и капитала.' },
+          { q: 'А если я ничего не понимаю в крипте?', a: 'Курс построен для новичков: от простого к сложному. Разберётся любой.' },
+          { q: 'Почему арбитраж лучше трейдинга?', a: 'Тут меньше рисков и нет зависимости от графиков. Зарабатываешь на разнице курсов.' },
         ].map((f, i) => (
           <details key={i} className="glass rounded-[14px] p-3">
             <summary className="cursor-pointer font-semibold">{f.q}</summary>
@@ -421,9 +335,7 @@ export default function Home() {
         ))}
       </div>
 
-      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">
-        @your_bot
-      </p>
+      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
     </main>
   );
 }

@@ -14,6 +14,7 @@ import {
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'risk' | 'finisher' | 'simulator';
+type Env = 'loading' | 'telegram' | 'browser';
 
 /* ====================== иконки уроков ====================== */
 const ICONS: Record<number, string> = {
@@ -82,7 +83,7 @@ export default function Home() {
   const router = useRouter();
 
   const [username, setUsername] = useState<string | null>(null);
-  const [isTelegram, setIsTelegram] = useState(true);
+  const [env, setEnv] = useState<Env>('loading'); // телега/браузер/ожидание
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -100,31 +101,52 @@ export default function Home() {
   // ВАЖНО: флаг, что исходный прогресс ЗАГРУЖЕН (чтобы не перетирать нулями)
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* ===== Telegram / демо-режим ===== */
+  /* ===== Telegram / демо-режим: корректная детекция SDK + initData ===== */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
-    const tg = (window as any)?.Telegram?.WebApp;
 
-    if (!tg) {
-      if (demo) {
-        setIsTelegram(true);
-        setUsername('user');
-      } else {
-        setIsTelegram(false);
+    let cancelled = false;
+
+    const detect = async () => {
+      // ждём появления SDK: до 10 попыток по 100мс
+      for (let i = 0; i < 10; i++) {
+        const wa = (window as any)?.Telegram?.WebApp;
+        if (wa) {
+          try {
+            wa.ready();
+            wa.expand?.();
+            const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
+            if (!cancelled) {
+              if (hasInit || demo) {
+                setEnv('telegram');
+                setUsername(wa.initDataUnsafe?.user?.username || (demo ? 'user' : null));
+              } else {
+                setEnv('browser');
+              }
+            }
+            return;
+          } catch {
+            // пробуем ещё
+          }
+        }
+        await new Promise((r) => setTimeout(r, 100));
       }
-      return;
-    }
+      // SDK не появился
+      if (!cancelled) {
+        if (demo) {
+          setEnv('telegram');
+          setUsername('user');
+        } else {
+          setEnv('browser');
+        }
+      }
+    };
 
-    try {
-      tg.expand();
-      tg.ready();
-      setUsername(tg.initDataUnsafe?.user?.username || null);
-      setIsTelegram(true);
-    } catch {
-      setIsTelegram(demo);
-      if (demo) setUsername('user');
-    }
+    detect();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* ===== Уроки: БД → кэш → хардкод ===== */
@@ -240,7 +262,7 @@ export default function Home() {
         setAllCompleted(all);
       } catch {}
 
-      // И ВОТ ЗДЕСЬ — ПОМЕЧАЕМ, ЧТО ПРОГРЕСС ЗАГРУЗИЛСЯ
+      // помечаем, что прогресс загружен
       setProgressLoaded(true);
     })();
   }, []);
@@ -255,7 +277,7 @@ export default function Home() {
 
   /* ===== Сохранение прогресса (LS + мягкая синхронизация в БД) ===== */
   useEffect(() => {
-    if (!progressLoaded) return; // ← не перезаписываем до первой загрузки
+    if (!progressLoaded) return;
 
     const next = { ...achievements };
     if (isCompleted(1)) next.first = true;
@@ -304,13 +326,18 @@ export default function Home() {
   /* ===== Метки ачивок ===== */
   const markers = [
     { key: 'first', at: 20, icon: '💸', title: 'Первый арбитраж (после 1 урока)', achieved: achievements.first },
-    { key: 'fast', at: 60, icon: '⚡', title: 'Быстрый старт (3 урока)', achieved: completedCount >= 3 },
-    { key: 'risk', at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)', achieved: achievements.risk },
-    { key: 'fin', at: 100, icon: '🚀', title: 'Финалист (все уроки)', achieved: achievements.finisher },
-    { key: 'sim', at: 100, icon: '📊', title: 'Симуляторщик (калькулятор)', achieved: achievements.simulator },
+    { key: 'fast',  at: 60, icon: '⚡', title: 'Быстрый старт (3 урока)', achieved: completedCount >= 3 },
+    { key: 'risk',  at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)', achieved: achievements.risk },
+    { key: 'fin',   at: 100, icon: '🚀', title: 'Финалист (все уроки)', achieved: achievements.finisher },
+    { key: 'sim',   at: 100, icon: '📊', title: 'Симуляторщик (калькулятор)', achieved: achievements.simulator },
   ] as const;
 
-  if (!isTelegram) {
+  /* ===== Гейт: что показывать ===== */
+  if (env === 'loading') {
+    return null; // не мигаем плашкой
+  }
+
+  if (env === 'browser') {
     return (
       <main className="flex h-screen items-center justify-center px-4">
         <div className="glass p-6 text-center">
@@ -320,6 +347,7 @@ export default function Home() {
     );
   }
 
+  // env === 'telegram'
   return (
     <main className="mx-auto max-w-xl px-4 py-5">
       {/* Presence: активность на главной */}

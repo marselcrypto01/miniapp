@@ -1,4 +1,3 @@
-// components/PresenceClient.tsx
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -48,7 +47,15 @@ function getUid(): string {
   return uid || 'anonymous';
 }
 
-/** Прочитать все сессии (используется в админке) */
+/** Username из Telegram WebApp (если есть) */
+function getTgUsername(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
+  } catch { return null; }
+}
+
+/** ==== ПУБЛИЧНЫЙ util: прочитать последнее состояние всех сессий из LS ==== */
 export function readPresenceStore(): PresenceSession[] {
   if (typeof window === 'undefined') return [];
   const arr = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
@@ -60,15 +67,7 @@ export function readPresenceStore(): PresenceSession[] {
   return [...byUid.values()];
 }
 
-/** Username из Telegram WebApp (если есть) */
-function getTgUsername(): string | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
-  } catch { return null; }
-}
-
-/** Записать/обновить свою сессию в LS и отправить пинг в Supabase */
+/** Локальная запись в LS + пинг в Supabase */
 async function upsertSession(partial: Partial<PresenceSession>) {
   const uid = getUid();
   const list = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
@@ -95,10 +94,10 @@ async function upsertSession(partial: Partial<PresenceSession>) {
   try {
     await writePresence({
       page: next.page,
-      activity: next.activity ?? undefined,       // string | undefined
-      lessonId: next.lessonId ?? null,            // number | null
-      progressPct: next.progressPct ?? undefined, // number | undefined
-      username: next.username ?? null,            // string | null
+      activity: next.activity ?? undefined,
+      lessonId: next.lessonId ?? null,
+      progressPct: next.progressPct ?? undefined,
+      username: next.username ?? null,
     });
   } catch (e) {
     // eslint-disable-next-line no-console

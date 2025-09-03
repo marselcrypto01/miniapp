@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { LESSONS, type LessonMeta } from '@/lib/lessons';
 import PresenceClient, {
   readPresenceStore,
-  type PresenceSession,
+  type PresenceSession as PresenceSessionType,
 } from '@/components/PresenceClient';
 
 /* =========================== Admin shell =========================== */
@@ -69,20 +69,34 @@ function LessonsEditor() {
     try {
       const saved = localStorage.getItem('admin_lessons');
       if (saved) {
-        setItems(JSON.parse(saved) as LessonEditable[]);
+        const arr = JSON.parse(saved) as unknown;
+        if (Array.isArray(arr)) {
+          setItems(
+            arr
+              .map((l: any): LessonEditable | null => {
+                const id = Number(l?.id);
+                if (!Number.isFinite(id)) return null;
+                return {
+                  id,
+                  title: String(l?.title ?? ''),
+                  subtitle: String(l?.subtitle ?? ''),
+                  description: String(l?.description ?? ''),
+                };
+              })
+              .filter(Boolean) as LessonEditable[]
+          );
+        } else {
+          seedFromDefaults();
+        }
       } else {
-        const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map(
-          (l: LessonMeta): LessonEditable => ({
-            id: l.id,
-            title: l.title,
-            subtitle: l.subtitle || '',
-            description: l.description || '',
-          })
-        );
-        setItems(seed);
+        seedFromDefaults();
       }
     } catch {
-      const fallback: LessonEditable[] = (LESSONS as LessonMeta[]).map(
+      seedFromDefaults();
+    }
+
+    function seedFromDefaults() {
+      const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map(
         (l: LessonMeta): LessonEditable => ({
           id: l.id,
           title: l.title,
@@ -90,7 +104,7 @@ function LessonsEditor() {
           description: l.description || '',
         })
       );
-      setItems(fallback);
+      setItems(seed);
     }
   }, []);
 
@@ -173,7 +187,7 @@ function LessonsEditor() {
 /* ====================== Пользователи — онлайн ====================== */
 
 function UsersLive() {
-  const [sessions, setSessions] = useState<PresenceSession[]>([]);
+  const [sessions, setSessions] = useState<PresenceSessionType[]>([]);
 
   // обновляем список каждые 5 сек (демо)
   useEffect(() => {
@@ -229,7 +243,7 @@ function UsersLive() {
                 </tr>
               )}
               {sessions.map((s) => (
-                <tr key={s.uid} className="border-t border-[var(--border)]">
+                <tr key={s.uid + '-' + s.updatedAt} className="border-t border-[var(--border)]">
                   <td className="px-2 py-2">{s.uid.slice(0, 6)}…</td>
                   <td className="px-2 py-2">{s.username ?? '—'}</td>
                   <td className="px-2 py-2">{s.page}</td>
@@ -267,8 +281,8 @@ function SettingsEditor() {
     try {
       const raw = localStorage.getItem('admin_quotes');
       if (raw) {
-        const arr = JSON.parse(raw) as string[];
-        setQuotes(Array.isArray(arr) ? arr : []);
+        const arr = JSON.parse(raw) as unknown;
+        setQuotes(Array.isArray(arr) ? (arr as string[]) : []);
       } else {
         setQuotes([
           'Учись видеть возможности там, где другие видят шум.',

@@ -16,6 +16,10 @@ type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'risk' | 'finisher' | 'simulator';
 type Env = 'loading' | 'telegram' | 'browser';
 
+/* ====================== константы очков/уроков ====================== */
+const CORE_LESSONS_COUNT = 5;
+const POINTS_PER_LESSON = 100;
+
 /* ====================== иконки уроков ====================== */
 const ICONS: Record<number, string> = {
   1: '🧠',
@@ -44,6 +48,7 @@ const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string 
   gold: { title: 'Золото', threshold: 120, icon: '🥇' },
 };
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
+  // XP оставляем для «уровня», но на экране показываем «очки» = 100 за урок.
   let xp = completedCount * 20;
   if (ach.first) xp += 5;
   if (ach.risk) xp += 5;
@@ -87,7 +92,6 @@ export default function Home() {
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
-  const [points, setPoints] = useState<number>(610);
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
@@ -98,7 +102,7 @@ export default function Home() {
   });
   const [allCompleted, setAllCompleted] = useState(false);
 
-  // ВАЖНО: флаг, что исходный прогресс ЗАГРУЖЕН (чтобы не перетирать нулями)
+  // флаг, что исходный прогресс ЗАГРУЖЕН (чтобы не перетирать нулями)
   const [progressLoaded, setProgressLoaded] = useState(false);
 
   /* ===== Telegram / демо-режим: корректная детекция SDK + initData ===== */
@@ -109,7 +113,6 @@ export default function Home() {
     let cancelled = false;
 
     const detect = async () => {
-      // ждём появления SDK: до 10 попыток по 100мс
       for (let i = 0; i < 10; i++) {
         const wa = (window as any)?.Telegram?.WebApp;
         if (wa) {
@@ -126,21 +129,12 @@ export default function Home() {
               }
             }
             return;
-          } catch {
-            // пробуем ещё
-          }
+          } catch {}
         }
         await new Promise((r) => setTimeout(r, 100));
       }
-      // SDK не появился
-      if (!cancelled) {
-        if (demo) {
-          setEnv('telegram');
-          setUsername('user');
-        } else {
-          setEnv('browser');
-        }
-      }
+      if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
+      if (demo) setUsername('user');
     };
 
     detect();
@@ -193,7 +187,7 @@ export default function Home() {
     };
   }, []);
 
-  /* ===== Цитата дня: БД → admin_quotes → запасной список ===== */
+  /* ===== Цитата дня ===== */
   useEffect(() => {
     (async () => {
       try {
@@ -262,7 +256,6 @@ export default function Home() {
         setAllCompleted(all);
       } catch {}
 
-      // помечаем, что прогресс загружен
       setProgressLoaded(true);
     })();
   }, []);
@@ -271,9 +264,11 @@ export default function Home() {
   const isCompleted = (id: number) =>
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
-  const coreLessonsCount = 5;
-  const completedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= 5).length;
-  const bar = Math.min(100, Math.round((completedCount / coreLessonsCount) * 100));
+  const completedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
+  const bar = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+
+  // ВНИМАНИЕ: очки теперь производятся от прогресса, а не отдельным стейтом
+  const points = completedCount * POINTS_PER_LESSON;
 
   /* ===== Сохранение прогресса (LS + мягкая синхронизация в БД) ===== */
   useEffect(() => {
@@ -282,14 +277,14 @@ export default function Home() {
     const next = { ...achievements };
     if (isCompleted(1)) next.first = true;
     if (isCompleted(3)) next.risk = true;
-    if (completedCount === coreLessonsCount) next.finisher = true;
+    if (completedCount === CORE_LESSONS_COUNT) next.finisher = true;
 
     setAchievements(next);
     try {
       localStorage.setItem('achievements', JSON.stringify(next));
     } catch {}
 
-    const finished = completedCount === coreLessonsCount;
+    const finished = completedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
     try {
       localStorage.setItem('all_completed', finished ? 'true' : 'false');
@@ -305,9 +300,9 @@ export default function Home() {
       } catch {}
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, progressLoaded]);
+  }, [progress, progressLoaded, completedCount]);
 
-  /* ===== «Отметить как пройдено» (демо на главной) ===== */
+  /* ===== «Отметить как пройдено» ===== */
   const complete = (lessonId: number) => {
     setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === lessonId);
@@ -315,10 +310,9 @@ export default function Home() {
         ? prev.map((p) => (p.lesson_id === lessonId ? { ...p, status: 'completed' } : p))
         : [...prev, { lesson_id: lessonId, status: 'completed' }];
     });
-    setPoints((x) => x + 10);
   };
 
-  /* ===== Уровень ===== */
+  /* ===== Уровень (для бейджа) ===== */
   const xp = computeXP(completedCount, achievements);
   const { key: levelKey, progressPct } = computeLevel(xp);
   const level = LEVELS[levelKey];
@@ -326,22 +320,21 @@ export default function Home() {
   /* ===== Метки ачивок ===== */
   const markers = [
     { key: 'first', at: 20, icon: '💸', title: 'Первый арбитраж (после 1 урока)', achieved: achievements.first },
-    { key: 'fast',  at: 60, icon: '⚡', title: 'Быстрый старт (3 урока)', achieved: completedCount >= 3 },
-    { key: 'risk',  at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)', achieved: achievements.risk },
-    { key: 'fin',   at: 100, icon: '🚀', title: 'Финалист (все уроки)', achieved: achievements.finisher },
-    { key: 'sim',   at: 100, icon: '📊', title: 'Симуляторщик (калькулятор)', achieved: achievements.simulator },
+    { key: 'fast',  at: 60, icon: '⚡',  title: 'Быстрый старт (3 урока)',         achieved: completedCount >= 3 },
+    { key: 'risk',  at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)',        achieved: achievements.risk },
+    { key: 'fin',   at: 100,icon: '🚀', title: 'Финалист (все уроки)',             achieved: achievements.finisher },
+    { key: 'sim',   at: 100,icon: '📊', title: 'Симуляторщик (калькулятор)',       achieved: achievements.simulator },
   ] as const;
 
-  /* ===== Гейт: что показывать ===== */
-  if (env === 'loading') {
-    return null; // не мигаем плашкой
-  }
+  /* ===== Гейт ===== */
+  if (env === 'loading') return null;
 
   if (env === 'browser') {
     return (
       <main className="flex h-screen items-center justify-center px-4">
         <div className="glass p-6 text-center">
-          <h1 className="text-xl font-bold">Открой приложение в Telegram</h1>
+          <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
         </div>
       </main>
     );
@@ -349,39 +342,42 @@ export default function Home() {
 
   // env === 'telegram'
   return (
-    <main className="mx-auto max-w-xl px-4 py-5">
-      {/* Presence: активность на главной */}
+    <main className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-xl px-3 sm:px-4 py-4 sm:py-5">
+      {/* Presence */}
       <PresenceClient page="home" activity="Главная" progressPct={bar} />
 
-      {/* Header */}
-      <div className="mb-3 flex items-start justify-between">
+      {/* Header — адаптивная сетка */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-[1.1] tracking-tight">
             Мини-курс по арбитражу
-            <br />
-            криптовалюты
+            <br className="hidden sm:block" />
+            <span className="sm:ml-0">криптовалюты</span>
           </h1>
           <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
+          <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)]">
+            Привет, @{username || 'user'}!
+          </p>
+          <p className="mt-1 text-[13px] sm:text-sm italic text-[var(--muted)]">
+            💡 {quote}
+          </p>
         </div>
 
-        <div className="flex flex-col items-end gap-1">
+        {/* Бейджи справа (на узких — под заголовком) */}
+        <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-2">
           <div className="chip">
             <span>🏆</span>
-            <span className="text-sm font-semibold">{points} очк.</span>
+            <span className="text-xs sm:text-sm font-semibold">{points} очк.</span>
           </div>
           <div className="chip" title="Уровень по опыту">
             <span>{level.icon}</span>
-            <span className="text-sm font-semibold">{level.title}</span>
+            <span className="text-xs sm:text-sm font-semibold">{level.title}</span>
           </div>
           <div className="w-28 h-1 rounded bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
             <div className="h-full bg-[var(--brand)]" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
       </div>
-
-      {/* Приветствие + цитата */}
-      <p className="text-sm text-[var(--muted)]">Привет, @{username || 'user'}!</p>
-      <p className="mt-1 mb-2 text-sm italic text-[var(--muted)]">💡 {quote}</p>
 
       {/* Статус-бар */}
       <div className="mt-3">
@@ -411,13 +407,13 @@ export default function Home() {
         </div>
 
         <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-          <span>Пройдено: {completedCount}/{coreLessonsCount}</span>
-          <span>Осталось: {Math.max(0, coreLessonsCount - completedCount)}</span>
+          <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
+          <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
         </div>
       </div>
 
       {/* Уроки */}
-      <h2 className="mt-6 text-2xl font-bold">Уроки</h2>
+      <h2 className="mt-6 text-xl sm:text-2xl font-bold">Уроки</h2>
       <div className="mt-3 space-y-3">
         {lessons.map((l) => {
           const done = isCompleted(l.id);
@@ -431,12 +427,18 @@ export default function Home() {
                     {ICONS[l.id] ?? '📘'}
                   </div>
                   <div>
-                    <div className="text-[17px] font-semibold">{l.title}</div>
-                    {l.subtitle && <div className="text-sm text-[var(--muted)]">{l.subtitle}</div>}
+                    <div className="text-[16px] sm:text-[17px] font-semibold leading-tight">
+                      {l.title}
+                    </div>
+                    {l.subtitle && (
+                      <div className="text-[12.5px] sm:text-sm text-[var(--muted)] leading-snug">
+                        {l.subtitle}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="hidden text-sm text-[var(--muted)] sm:block">
+                <div className="hidden sm:block text-sm text-[var(--muted)]">
                   {done ? '✅ Пройден' : lockedExtra ? '🔒 Закрыто' : '⏳ Не пройден'}
                 </div>
               </div>
@@ -463,7 +465,7 @@ export default function Home() {
       </div>
 
       {/* FAQ */}
-      <h2 className="mt-6 text-2xl font-bold">FAQ</h2>
+      <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[
           { q: 'А что если карту заблокируют?', a: 'Есть методы подготовки карт и распределения лимитов. Это часть арбитража — учимся обходить риски.' },
@@ -472,8 +474,8 @@ export default function Home() {
           { q: 'Почему арбитраж лучше трейдинга?', a: 'Тут меньше рисков и нет зависимости от графиков. Зарабатываешь на разнице курсов.' },
         ].map((f, i) => (
           <details key={i} className="glass rounded-[14px] p-3">
-            <summary className="cursor-pointer font-semibold">{f.q}</summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">{f.a}</p>
+            <summary className="cursor-pointer font-semibold text-[15px] leading-tight">{f.q}</summary>
+            <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)] leading-snug">{f.a}</p>
           </details>
         ))}
       </div>

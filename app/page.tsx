@@ -102,7 +102,6 @@ export default function Home() {
   });
   const [allCompleted, setAllCompleted] = useState(false);
 
-  // исходный прогресс получен (чтобы не перетирать нулями)
   const [progressLoaded, setProgressLoaded] = useState(false);
 
   /* ===== Telegram / демо-режим ===== */
@@ -233,7 +232,6 @@ export default function Home() {
         if (raw) setProgress(JSON.parse(raw) as Progress[]);
       }
 
-      // ачивки/флаг
       try {
         const ach = localStorage.getItem('achievements');
         const all = localStorage.getItem('all_completed') === 'true';
@@ -280,7 +278,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* ===== «Готово» для урока ===== */
+  /* ===== Отметка прохождения (внутри уроков — позже; на главной не показываем) ===== */
   const complete = (lessonId: number) => {
     setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === lessonId);
@@ -294,15 +292,6 @@ export default function Home() {
   const xp = computeXP(completedCount, achievements);
   const { key: levelKey, progressPct } = computeLevel(xp);
   const level = LEVELS[levelKey];
-
-  /* ===== Метки ачивок ===== */
-  const markers = [
-    { key: 'first', at: 20, icon: '💸', title: 'Первый арбитраж (после 1 урока)', achieved: achievements.first },
-    { key: 'fast',  at: 60, icon: '⚡',  title: 'Быстрый старт (3 урока)',         achieved: completedCount >= 3 },
-    { key: 'risk',  at: 60, icon: '🛡️', title: 'Холодная голова (урок 3)',        achieved: achievements.risk },
-    { key: 'fin',   at: 100,icon: '🚀', title: 'Финалист (все уроки)',             achieved: achievements.finisher },
-    { key: 'sim',   at: 100,icon: '📊', title: 'Симуляторщик (калькулятор)',       achieved: achievements.simulator },
-  ] as const;
 
   /* ===== Гейт ===== */
   if (env === 'loading') return null;
@@ -318,28 +307,69 @@ export default function Home() {
     );
   }
 
-  // env === 'telegram'
+  // вспомогательная функция для «кругового прогресса»
+  const ProgressRing = ({ size = 36, value }: { size?: number; value: number }) => {
+    const clamped = Math.max(0, Math.min(100, value));
+    const style: React.CSSProperties = {
+      width: size,
+      height: size,
+      borderRadius: '9999px',
+      background: `conic-gradient(var(--brand) ${clamped}%, transparent 0)`,
+      padding: 2,
+    };
+    return (
+      <div style={style}>
+        <div
+          className="grid place-items-center rounded-full"
+          style={{
+            width: '100%',
+            height: '100%',
+            background: 'var(--surface-2)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          <span className="text-base">🏅</span>
+        </div>
+      </div>
+    );
+  };
+
+  // красивые чекпоинты (5 сегментов)
+  const checkpoints = new Array(CORE_LESSONS_COUNT).fill(0).map((_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT));
+  const filledWidth = `${bar}%`;
+
   return (
     <main className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-xl px-3 sm:px-4 py-4 sm:py-5">
       {/* Presence */}
       <PresenceClient page="home" activity="Главная" progressPct={bar} />
 
-      {/* ======= ШАПКА: чистая иерархия ======= */}
+      {/* ======= ШАПКА ======= */}
       <header className="mb-5">
-        {/* Заголовок */}
+        {/* 1) Заголовок */}
         <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.1]">
-          Мини-курс по арбитражу<br className="hidden sm:block" />криптовалюты
+          Курс по заработку на крипте
         </h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
-        {/* Привет + цитата */}
-        <div className="mt-3 space-y-1 text-[13px] sm:text-sm text-[var(--muted)]">
-          <p>Привет, @{username || 'user'}!</p>
-          <p className="italic">💡 {quote}</p>
-        </div>
+        {/* 2) Привет */}
+        <p className="mt-3 text-[13px] sm:text-sm text-[var(--muted)]">
+          Привет, @{username || 'user'}!
+        </p>
 
-        {/* Очки + уровень + мини-бар одной полосой */}
-        <div className="mt-4 flex items-center gap-2">
+        {/* 3) Цитата — настоящий блокquote */}
+        <blockquote
+          className="mt-2 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 85%,transparent)] p-3 text-[13px] sm:text-sm italic text-[var(--muted)]"
+          style={{
+            boxShadow: 'var(--shadow)',
+            borderLeftWidth: '4px',
+            borderLeftColor: 'var(--brand)',
+          }}
+        >
+          <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
+        </blockquote>
+
+        {/* 4) Очки + медаль + круговой прогресс вокруг медали */}
+        <div className="mt-4 flex items-center gap-3">
           <div className="chip px-3 py-2">
             <span>🏆</span>
             <span className="text-sm font-semibold">{points} очк.</span>
@@ -348,50 +378,44 @@ export default function Home() {
             <span>{level.icon}</span>
             <span className="text-sm font-semibold">{level.title}</span>
           </div>
-          <div className="flex-1 h-1 rounded bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
-            <div className="h-full bg-[var(--brand)]" style={{ width: `${progressPct}%` }} />
+
+          {/* справа — «обводка» как прогресс по курсу */}
+          <div className="ml-auto">
+            <ProgressRing value={bar} />
           </div>
         </div>
       </header>
 
-      {/* ======= Прогресс по курсу ======= */}
+      {/* ======= 5) Новый статус-бар с сегментами ======= */}
       <section className="mt-2">
-        <div className="relative h-8 mb-2">
-          {markers.map((m) => (
-            <span
-              key={m.key}
-              title={m.title}
-              className={`absolute -translate-x-1/2 grid place-items-center w-7 h-7 rounded-full text-[13px] ${
-                m.achieved ? '' : 'opacity-45'
-              }`}
+        <div className="relative h-3 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
+          <div
+            className="absolute inset-y-0 left-0 bg-[var(--brand)]"
+            style={{ width: filledWidth, boxShadow: 'inset 0 0 10px rgba(0,0,0,.15)' }}
+          />
+          {/* чекпоинты */}
+          {checkpoints.map((p, i) => (
+            <div
+              key={i}
+              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full border border-[var(--border)]"
               style={{
-                left: `${m.at}%`,
-                top: 0,
-                background: 'color-mix(in oklab, var(--brand-200) 30%, transparent)',
-                border: '1px solid color-mix(in oklab, var(--brand) 50%, var(--border))',
-                boxShadow: 'var(--shadow)',
+                left: `calc(${p}% - 5px)`,
+                background: p <= bar ? 'var(--brand)' : 'var(--surface-1)',
               }}
-            >
-              {m.icon}
-            </span>
+              title={`Урок ${i + 1}`}
+            />
           ))}
         </div>
-
-        <div className="progress">
-          <div className="progress__bar" style={{ width: `${bar}%` }} />
-        </div>
-
         <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
           <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
           <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
         </div>
       </section>
 
-      {/* ======= Уроки ======= */}
+      {/* ======= 6) Уроки (только кнопка «Смотреть») ======= */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">Уроки</h2>
       <div className="mt-3 space-y-3">
         {lessons.map((l) => {
-          const done = isCompleted(l.id);
           const lockedExtra = l.id === 6 && !allCompleted;
 
           return (
@@ -413,37 +437,21 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="hidden sm:block text-sm text-[var(--muted)]">
-                  {done ? '✅ Пройден' : lockedExtra ? '🔒 Закрыто' : '⏳ Не пройден'}
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center gap-3">
                 <button
-                  className="btn-brand flex-1"
+                  className="btn-brand whitespace-nowrap"
                   onClick={() => router.push(`/lesson/${l.id}`)}
                   disabled={lockedExtra}
                   title={lockedExtra ? 'Откроется после прохождения всех уроков' : 'Открыть урок'}
                 >
                   {lockedExtra ? 'Закрыто' : 'Смотреть'}
                 </button>
-
-                {!done && l.id !== 6 && (
-                  <button
-                    className="btn px-3 py-2 whitespace-nowrap flex items-center gap-1"
-                    onClick={() => complete(l.id)}
-                    title="Отметить как пройдено"
-                  >
-                    ✅ Готово
-                  </button>
-                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* ======= FAQ ======= */}
+      {/* FAQ */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[

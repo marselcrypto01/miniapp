@@ -136,6 +136,9 @@ button { font: inherit; cursor: pointer; }
   border-radius: 999px;
 }
 
+html, body { height: 100%; overflow-x: hidden; }  /* фикс горизонтального скролла */
+main { overflow-x: hidden; } 
+
 /* ───────── Табы ───────── */
 .tabs { display: inline-flex; gap: .25rem; padding: .35rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
 .tab  { padding: .5rem .9rem; border-radius: 12px; color: var(--muted); transition: background .15s ease, color .15s ease; }

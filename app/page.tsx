@@ -278,17 +278,17 @@ export default function Home() {
     { key: 'simulator' as const,icon: '📊', label: 'Симулятор' },
   ];
 
-  /* ===== Чип с динамической обводкой (медаль) ===== */
+  /* ===== Компонент: чип с динамической обводкой (медаль) ===== */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({
     pct, children, className,
   }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
       <div
-        className={`rounded-full p-[2px] ${className || ''}`}
+        className={`rounded-full p-[2px] w-full ${className || ''}`}
         style={{ background: `conic-gradient(var(--brand) ${clamped}%, transparent 0)` }}
       >
-        <div className="chip px-4 py-2 rounded-full">
+        <div className="chip px-4 py-2 rounded-full w-full justify-center">
           {children}
         </div>
       </div>
@@ -300,7 +300,7 @@ export default function Home() {
 
   if (env === 'browser') {
     return (
-      <main className="flex h-screen items-center justify-center px-4">
+      <main className="flex h-screen items-center justify-center px-4 overflow-x-hidden">
         <div className="glass p-6 text-center">
           <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
@@ -309,19 +309,19 @@ export default function Home() {
     );
   }
 
-  /* ===== НЕ-хуки: вычисляем списки как константы ===== */
+  /* НЕ-хуки */
   const checkpoints = Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT));
   const coreLessons  = lessons.filter((l) => l.id <= CORE_LESSONS_COUNT);
   const bonusLessons = lessons.filter((l) => l.id >  CORE_LESSONS_COUNT);
 
   /* ===== Разметка ===== */
   return (
-    <main className="mx-auto w-full max-w-md sm:max-w-lg md:max-w-xl px-3 sm:px-4 py-4">
+    <main className="mx-auto w-full max-w-[720px] px-3 sm:px-4 py-4 overflow-x-hidden">
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
       {/* ======= ШАПКА ======= */}
       <header className="mb-5">
-        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.1]">
+        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-[1.1]">
           Курс по заработку на крипте
         </h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
@@ -337,13 +337,14 @@ export default function Home() {
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень */}
-        <div className="mt-3 flex items-center gap-2">
-          <div className="chip">
-            <span>🏆</span>
-            <span className="text-sm font-semibold">{points} очк.</span>
+        {/* очки + уровень — РАСТЯНУТЫЕ на ширину, как статус-бар */}
+        <div className="mt-4 grid grid-cols-2 gap-2 w-full">
+          <div className="w-full">
+            <div className="chip px-4 py-2 w-full justify-center">
+              <span>🏆</span>
+              <span className="text-sm font-semibold">{points} очк.</span>
+            </div>
           </div>
-
           <ChipRing pct={progressPct}>
             <span>{level.icon}</span>
             <span className="text-sm font-semibold">{level.title}</span>
@@ -358,7 +359,7 @@ export default function Home() {
               <div
                 key={i}
                 className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]"
-                style={{ left: `calc(${p}% - 4px)`, background: p <= coursePct ? 'var(--brand)' : 'var(--surface-1)' }}
+                style={{ left: `calc(${p}% - 4px)` }}
                 title={`Урок ${i + 1}`}
               />
             ))}
@@ -369,9 +370,9 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ачивки */}
-        <div className="mt-2 flex items-center gap-2">
-          {achievements && achList.map(a => {
+        {/* ачивки — переносятся по строкам */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {achList.map(a => {
             const active = achievements[a.key];
             return (
               <div
@@ -388,7 +389,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ===== Уроки — тёмные карточки ===== */}
+      {/* ===== Уроки — тёмные карточки, МОБИЛЬНАЯ ВЕРСТКА ===== */}
       <section>
         <h2 className="text-xl sm:text-2xl font-bold mb-2">Уроки</h2>
 
@@ -398,13 +399,20 @@ export default function Home() {
             return (
               <div
                 key={l.id}
-                className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]"
+                className="
+                  grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
+                  shadow-[0_1px_12px_rgba(0,0,0,.12)]
+                  grid-cols-[48px_1fr]
+                  sm:grid-cols-[56px_1fr_auto]
+                "
               >
-                <div className="shrink-0 h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
+                {/* иконка */}
+                <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
                   {ICONS[l.id] ?? '📘'}
                 </div>
 
-                <div className="flex-1">
+                {/* текст */}
+                <div>
                   <div className="text-[17px] sm:text-[18px] font-semibold leading-tight">
                     Урок {idx + 1}. {l.title}
                   </div>
@@ -413,12 +421,15 @@ export default function Home() {
                   </div>
                 </div>
 
-                <button
-                  className="px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                  onClick={() => router.push(`/lesson/${l.id}`)}
-                >
-                  Смотреть
-                </button>
+                {/* кнопка: на мобиле — на всю ширину ниже, на широких — справа */}
+                <div className="col-span-2 sm:col-span-1 sm:self-center">
+                  <button
+                    className="w-full sm:w-auto px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                    onClick={() => router.push(`/lesson/${l.id}`)}
+                  >
+                    Смотреть
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -431,11 +442,17 @@ export default function Home() {
 
             <div className="space-y-3">
               {bonusLessons.map((l) => (
-                <div key={l.id} className="flex items-center gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
-                  <div className="shrink-0 h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
+                <div
+                  key={l.id}
+                  className="
+                    grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
+                    grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr_auto]
+                  "
+                >
+                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
                     {ICONS[l.id] ?? '📘'}
                   </div>
-                  <div className="flex-1">
+                  <div>
                     <div className="text-[17px] font-semibold leading-tight flex items-center gap-2">
                       {l.title}
                       <span className="text-[11px] px-2 py-[2px] rounded-full border border-[var(--border)] text-[var(--muted)]">
@@ -444,12 +461,14 @@ export default function Home() {
                     </div>
                     <div className="text-[12px] text-[var(--muted)] mt-1">Не влияет на прогресс</div>
                   </div>
-                  <button
-                    className="px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                    onClick={() => router.push(`/lesson/${l.id}`)}
-                  >
-                    Открыть
-                  </button>
+                  <div className="col-span-2 sm:col-span-1 sm:self-center">
+                    <button
+                      className="w-full sm:w-auto px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                      onClick={() => router.push(`/lesson/${l.id}`)}
+                    >
+                      Открыть
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

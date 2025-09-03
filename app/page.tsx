@@ -48,7 +48,7 @@ const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string 
   gold: { title: 'Золото', threshold: 120, icon: '🥇' },
 };
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
-  // XP оставляем для «уровня», но на экране показываем «очки» = 100 за урок.
+  // XP для бейджа уровня (очки на экране считаем отдельно: 100 за урок).
   let xp = completedCount * 20;
   if (ach.first) xp += 5;
   if (ach.risk) xp += 5;
@@ -88,7 +88,7 @@ export default function Home() {
   const router = useRouter();
 
   const [username, setUsername] = useState<string | null>(null);
-  const [env, setEnv] = useState<Env>('loading'); // телега/браузер/ожидание
+  const [env, setEnv] = useState<Env>('loading');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -102,16 +102,15 @@ export default function Home() {
   });
   const [allCompleted, setAllCompleted] = useState(false);
 
-  // флаг, что исходный прогресс ЗАГРУЖЕН (чтобы не перетирать нулями)
+  // исходный прогресс получен (чтобы не перетирать нулями)
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* ===== Telegram / демо-режим: корректная детекция SDK + initData ===== */
+  /* ===== Telegram / демо-режим ===== */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
 
     let cancelled = false;
-
     const detect = async () => {
       for (let i = 0; i < 10; i++) {
         const wa = (window as any)?.Telegram?.WebApp;
@@ -136,14 +135,11 @@ export default function Home() {
       if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
       if (demo) setUsername('user');
     };
-
     detect();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  /* ===== Уроки: БД → кэш → хардкод ===== */
+  /* ===== Уроки: БД → кэш → дефолты ===== */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -161,15 +157,11 @@ export default function Home() {
           .map((r) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
 
         setLessons(mapped);
-        try {
-          localStorage.setItem('lessons_cache', JSON.stringify(mapped));
-        } catch {}
+        try { localStorage.setItem('lessons_cache', JSON.stringify(mapped)); } catch {}
       } catch {
         const raw = localStorage.getItem('lessons_cache');
         if (raw) {
-          try {
-            setLessons(JSON.parse(raw) as Lesson[]);
-          } catch {}
+          try { setLessons(JSON.parse(raw) as Lesson[]); } catch {}
         } else {
           setLessons([
             { id: 1, title: 'Крипта простыми словами' },
@@ -182,9 +174,7 @@ export default function Home() {
         }
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   /* ===== Цитата дня ===== */
@@ -192,10 +182,7 @@ export default function Home() {
     (async () => {
       try {
         const q = await getRandomDailyQuote();
-        if (q) {
-          setQuote(q);
-          return;
-        }
+        if (q) { setQuote(q); return; }
       } catch {}
       try {
         const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
@@ -236,9 +223,7 @@ export default function Home() {
             status: r.status === 'completed' ? 'completed' : 'pending',
           }));
           setProgress(arr);
-          try {
-            localStorage.setItem('progress', JSON.stringify(arr));
-          } catch {}
+          try { localStorage.setItem('progress', JSON.stringify(arr)); } catch {}
         } else {
           const raw = localStorage.getItem('progress');
           if (raw) setProgress(JSON.parse(raw) as Progress[]);
@@ -264,13 +249,14 @@ export default function Home() {
   const isCompleted = (id: number) =>
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
-  const completedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
-  const bar = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+  const completedCount = progress.filter(
+    (p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT
+  ).length;
 
-  // ВНИМАНИЕ: очки теперь производятся от прогресса, а не отдельным стейтом
+  const bar = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
   const points = completedCount * POINTS_PER_LESSON;
 
-  /* ===== Сохранение прогресса (LS + мягкая синхронизация в БД) ===== */
+  /* ===== Сохранение прогресса ===== */
   useEffect(() => {
     if (!progressLoaded) return;
 
@@ -280,29 +266,21 @@ export default function Home() {
     if (completedCount === CORE_LESSONS_COUNT) next.finisher = true;
 
     setAchievements(next);
-    try {
-      localStorage.setItem('achievements', JSON.stringify(next));
-    } catch {}
+    try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
 
     const finished = completedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
-    try {
-      localStorage.setItem('all_completed', finished ? 'true' : 'false');
-    } catch {}
+    try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
 
-    try {
-      localStorage.setItem('progress', JSON.stringify(progress));
-    } catch {}
+    try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
 
     (async () => {
-      try {
-        await saveUserProgress(getClientUid(), progress);
-      } catch {}
+      try { await saveUserProgress(getClientUid(), progress); } catch {}
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* ===== «Отметить как пройдено» ===== */
+  /* ===== «Готово» для урока ===== */
   const complete = (lessonId: number) => {
     setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === lessonId);
@@ -346,41 +324,38 @@ export default function Home() {
       {/* Presence */}
       <PresenceClient page="home" activity="Главная" progressPct={bar} />
 
-      {/* Header — адаптивная сетка */}
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-start">
-        <div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold leading-[1.1] tracking-tight">
-            Мини-курс по арбитражу
-            <br className="hidden sm:block" />
-            <span className="sm:ml-0">криптовалюты</span>
-          </h1>
-          <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
-          <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)]">
-            Привет, @{username || 'user'}!
-          </p>
-          <p className="mt-1 text-[13px] sm:text-sm italic text-[var(--muted)]">
-            💡 {quote}
-          </p>
+      {/* ======= ШАПКА: чистая иерархия ======= */}
+      <header className="mb-5">
+        {/* Заголовок */}
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.1]">
+          Мини-курс по арбитражу<br className="hidden sm:block" />криптовалюты
+        </h1>
+        <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
+
+        {/* Привет + цитата */}
+        <div className="mt-3 space-y-1 text-[13px] sm:text-sm text-[var(--muted)]">
+          <p>Привет, @{username || 'user'}!</p>
+          <p className="italic">💡 {quote}</p>
         </div>
 
-        {/* Бейджи справа (на узких — под заголовком) */}
-        <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-2">
-          <div className="chip">
+        {/* Очки + уровень + мини-бар одной полосой */}
+        <div className="mt-4 flex items-center gap-2">
+          <div className="chip px-3 py-2">
             <span>🏆</span>
-            <span className="text-xs sm:text-sm font-semibold">{points} очк.</span>
+            <span className="text-sm font-semibold">{points} очк.</span>
           </div>
-          <div className="chip" title="Уровень по опыту">
+          <div className="chip px-3 py-2" title="Уровень по опыту">
             <span>{level.icon}</span>
-            <span className="text-xs sm:text-sm font-semibold">{level.title}</span>
+            <span className="text-sm font-semibold">{level.title}</span>
           </div>
-          <div className="w-28 h-1 rounded bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
+          <div className="flex-1 h-1 rounded bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
             <div className="h-full bg-[var(--brand)]" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Статус-бар */}
-      <div className="mt-3">
+      {/* ======= Прогресс по курсу ======= */}
+      <section className="mt-2">
         <div className="relative h-8 mb-2">
           {markers.map((m) => (
             <span
@@ -410,9 +385,9 @@ export default function Home() {
           <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
           <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
         </div>
-      </div>
+      </section>
 
-      {/* Уроки */}
+      {/* ======= Уроки ======= */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">Уроки</h2>
       <div className="mt-3 space-y-3">
         {lessons.map((l) => {
@@ -445,7 +420,7 @@ export default function Home() {
 
               <div className="mt-3 flex items-center gap-3">
                 <button
-                  className="btn-brand"
+                  className="btn-brand flex-1"
                   onClick={() => router.push(`/lesson/${l.id}`)}
                   disabled={lockedExtra}
                   title={lockedExtra ? 'Откроется после прохождения всех уроков' : 'Открыть урок'}
@@ -454,8 +429,12 @@ export default function Home() {
                 </button>
 
                 {!done && l.id !== 6 && (
-                  <button className="btn" onClick={() => complete(l.id)}>
-                    Отметить как пройдено
+                  <button
+                    className="btn px-3 py-2 whitespace-nowrap flex items-center gap-1"
+                    onClick={() => complete(l.id)}
+                    title="Отметить как пройдено"
+                  >
+                    ✅ Готово
                   </button>
                 )}
               </div>
@@ -464,7 +443,7 @@ export default function Home() {
         })}
       </div>
 
-      {/* FAQ */}
+      {/* ======= FAQ ======= */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[

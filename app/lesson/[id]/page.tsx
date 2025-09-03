@@ -1,20 +1,40 @@
+// app/lesson/[id]/page.tsx
 'use client';
 
 import React, { use, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import PresenceClient from '@/components/PresenceClient';
 import { getLessonById } from '@/lib/lessons';
+import { getUserProgress, saveUserProgress } from '@/lib/db';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type TabKey = 'desc' | 'test' | 'materials';
 
-export default function LessonPage({ params }: { params: Promise<{ id: string }> }) {
-  // Next.js 15: params — Promise, достаём через React.use()
-  const { id } = use(params);
-  const idNum = Number(id);
-  const meta = getLessonById(idNum);
+// тот же uid, что использует PresenceClient/Home
+const UID_KEY = 'presence_uid';
+function getClientUid(): string {
+  try {
+    let uid = localStorage.getItem(UID_KEY);
+    if (!uid) {
+      uid =
+        (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(UID_KEY, uid);
+    }
+    return uid;
+  } catch {
+    return 'anonymous';
+  }
+}
 
+export default function LessonPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params); // Next 15: params — Promise
+  const idNum = Number(id);
+
+  const meta = getLessonById(idNum);
   const hasTest = !!meta?.hasTest;
+
   const tabs = useMemo<TabKey[]>(
     () => (hasTest ? ['desc', 'test', 'materials'] : ['desc', 'materials']),
     [hasTest]
@@ -22,19 +42,19 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
 
   const [tab, setTab] = useState<TabKey>('desc');
   const [progress, setProgress] = useState<Progress[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  // ---------- строгое чтение прогресса из localStorage ----------
-  function readProgress(): Progress[] {
+  // строгий parse из LS
+  function readProgressLS(): Progress[] {
     try {
       const raw = localStorage.getItem('progress');
       if (!raw) return [];
-      const arr = JSON.parse(raw) as unknown;
+      const arr = JSON.parse(raw);
       if (!Array.isArray(arr)) return [];
       return arr
-        .map((r: any): Progress | null => {
+        .map((r: any) => {
           const lesson_id = Number(r?.lesson_id);
-          const status: Progress['status'] =
-            r?.status === 'completed' ? 'completed' : 'pending';
+          const status: Progress['status'] = r?.status === 'completed' ? 'completed' : 'pending';
           return Number.isFinite(lesson_id) ? { lesson_id, status } : null;
         })
         .filter(Boolean) as Progress[];
@@ -43,30 +63,60 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
     }
   }
 
+  // Загрузка прогресса: сначала из БД, иначе — из LS
   useEffect(() => {
-    setProgress(readProgress());
-  }, []);
+    const uid = getClientUid();
+    (async () => {
+      try {
+        const rows = await getUserProgress(uid);
+        if (rows && rows.length) {
+          const arr: Progress[] = rows.map((r) => ({
+            lesson_id: Number(r.lesson_id),
+            status: r.status === 'completed' ? 'completed' : 'pending',
+          }));
+          setProgress(arr);
+          try {
+            localStorage.setItem('progress', JSON.stringify(arr));
+          } catch {}
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      setProgress(readProgressLS());
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idNum]);
 
-  // отметить как пройдено (с явной типизацией результата)
-  const markCompleted = () => {
-    setProgress((prev): Progress[] => {
+  const isCompleted = progress.some((p) => p.lesson_id === idNum && p.status === 'completed');
+
+  // Отметить как пройдено (LS + БД, без повторного чтения из LS)
+  const markCompleted = async () => {
+    const uid = getClientUid();
+
+    let next: Progress[] = [];
+    setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === idNum);
-      const next: Progress[] = exists
-        ? prev.map((p): Progress =>
-            p.lesson_id === idNum ? { ...p, status: 'completed' } as Progress : p
-          )
-        : [...prev, { lesson_id: idNum, status: 'completed' }];
+      next = exists
+        ? prev.map((p) => (p.lesson_id === idNum ? { ...p, status: 'completed' as const } : p))
+        : [...prev, { lesson_id: idNum, status: 'completed' as const }];
 
       try {
         localStorage.setItem('progress', JSON.stringify(next));
       } catch {}
       return next;
     });
-  };
 
-  const isCompleted = progress.some(
-    (p) => p.lesson_id === idNum && p.status === 'completed'
-  );
+    setSaving(true);
+    try {
+      await saveUserProgress(uid, next);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('save progress error', e);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // соседние уроки
   const prevId = idNum > 1 ? idNum - 1 : null;
@@ -82,11 +132,7 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
 
   return (
     <main className="mx-auto max-w-xl px-4 py-5">
-      <PresenceClient
-        page="lesson"
-        lessonId={idNum}
-        activity={`Урок #${idNum} | вкладка: ${tab}`}
-      />
+      <PresenceClient page="lesson" lessonId={idNum} activity={`Урок #${idNum} | вкладка: ${tab}`} />
 
       <div className="mb-3 flex items-center justify-between">
         <Link href="/" className="btn--outline">← Назад</Link>
@@ -94,12 +140,10 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
         <Link href="/" className="text-sm text-[var(--muted)]">На главную</Link>
       </div>
 
-      {/* Заглушка под видео */}
+      {/* Видео */}
       <div className="glass rounded-xl p-6 text-center">
         <div className="text-lg font-semibold">🎬 Видео-урок #{idNum}</div>
-        <div className="mt-2 text-sm text-[var(--muted)]">
-          Здесь будет встроенный плеер (YouTube/Vimeo/файл)
-        </div>
+        <div className="mt-2 text-sm text-[var(--muted)]">Здесь будет встроенный плеер (YouTube/Vimeo/файл)</div>
       </div>
 
       {/* Табы */}
@@ -121,9 +165,7 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
       <div className="mt-3 glass rounded-xl p-4">
         {tab === 'desc' && (
           <div className="space-y-2">
-            <div className="text-sm text-[var(--muted)]">
-              {meta.description || 'Описание урока'}
-            </div>
+            <div className="text-sm text-[var(--muted)]">{meta.description || 'Описание урока'}</div>
             <ul className="list-disc pl-5 text-sm">
               <li>Главная идея урока</li>
               <li>3–5 ключевых тезисов</li>
@@ -135,21 +177,19 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
         {tab === 'test' && hasTest && (
           <div className="space-y-2">
             <div className="text-sm text-[var(--muted)]">Мини-тест (заглушка)</div>
-            <button className="btn-brand" onClick={markCompleted}>
-              Отметить как пройдено
+            <button className="btn-brand" onClick={markCompleted} disabled={saving || isCompleted}>
+              {isCompleted ? 'Пройдено' : saving ? 'Сохранение…' : 'Отметить как пройдено'}
             </button>
           </div>
         )}
 
         {tab === 'materials' && (
-          <div className="text-sm text-[var(--muted)]">
-            Ссылки, чек-листы, PDF — добавим позже
-          </div>
+          <div className="text-sm text-[var(--muted)]">Ссылки, чек-листы, PDF — добавим позже</div>
         )}
       </div>
 
-      {/* Навигация */}
-      <div className="mt-4 flex items-center justify-between">
+      {/* Нижняя панель — «красивые ячейки» */}
+      <div className="mt-4 glass rounded-xl p-3 flex items-center justify-between">
         <Link href="/" className="btn--ghost">К списку уроков</Link>
 
         <div className="flex gap-2">
@@ -168,9 +208,10 @@ export default function LessonPage({ params }: { params: Promise<{ id: string }>
         <button
           className={`btn ${isCompleted ? 'opacity-70 cursor-default' : ''}`}
           onClick={markCompleted}
-          disabled={isCompleted}
+          disabled={isCompleted || saving}
+          title={isCompleted ? 'Урок уже отмечен' : 'Отметить урок как пройденный'}
         >
-          {isCompleted ? 'Пройдено' : 'Отметить пройдено'}
+          {isCompleted ? 'Пройдено' : saving ? 'Сохранение…' : 'Отметить пройдено'}
         </button>
       </div>
     </main>

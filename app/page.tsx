@@ -1,13 +1,21 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
+import {
+  listLessons,
+  getRandomDailyQuote,
+  getUserProgress,
+  saveUserProgress,
+} from '@/lib/db';
 
+/* ====================== локальные типы ====================== */
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
-type Lesson = { id: number; title: string; subtitle?: string };
+type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'risk' | 'finisher' | 'simulator';
 
+/* ====================== иконки уроков ====================== */
 const ICONS: Record<number, string> = {
   1: '🧠',
   2: '🎯',
@@ -17,6 +25,7 @@ const ICONS: Record<number, string> = {
   6: '📚',
 };
 
+/* ===== запасные цитаты на случай офлайна БД ===== */
 const QUOTES = [
   'Учись видеть возможности там, где другие видят шум.',
   'Успех любит дисциплину.',
@@ -25,7 +34,7 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
-// ===== Уровни (без перков) =====
+/* ===== Уровни (без перков) ===== */
 type LevelKey = 'novice' | 'bronze' | 'silver' | 'gold';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
@@ -33,9 +42,8 @@ const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string 
   silver: { title: 'Серебро', threshold: 80, icon: '🥈' },
   gold: { title: 'Золото', threshold: 120, icon: '🥇' },
 };
-
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
-  let xp = completedCount * 20; // 5 уроков → 100 XP
+  let xp = completedCount * 20;
   if (ach.first) xp += 5;
   if (ach.risk) xp += 5;
   if (ach.simulator) xp += 5;
@@ -55,12 +63,28 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
+/* ===== uid, общий с PresenceClient ===== */
+const UID_KEY = 'presence_uid';
+function getClientUid(): string {
+  let uid = '';
+  try {
+    uid = localStorage.getItem(UID_KEY) || '';
+    if (!uid) {
+      uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(UID_KEY, uid);
+    }
+  } catch {}
+  return uid || 'anonymous';
+}
+
+/* ====================== КОМПОНЕНТ ====================== */
 export default function Home() {
   const router = useRouter();
 
   const [username, setUsername] = useState<string | null>(null);
   const [isTelegram, setIsTelegram] = useState(true);
 
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [points, setPoints] = useState<number>(610);
   const [quote, setQuote] = useState<string>('');
@@ -71,22 +95,12 @@ export default function Home() {
     finisher: false,
     simulator: false,
   });
-
   const [allCompleted, setAllCompleted] = useState(false);
 
-  const lessons: Lesson[] = useMemo(
-    () => [
-      { id: 1, title: 'Крипта простыми словами' },
-      { id: 2, title: 'Арбитраж: как это работает' },
-      { id: 3, title: 'Риски, мифы и страхи' },
-      { id: 4, title: 'Главные ошибки новичков' },
-      { id: 5, title: 'Итог: как двигаться дальше' },
-      { id: 6, title: 'Дополнительная полезная информация', subtitle: 'Чек-листы, шпаргалки, ссылки…' },
-    ],
-    []
-  );
+  // ВАЖНО: флаг, что исходный прогресс ЗАГРУЖЕН (чтобы не перетирать нулями)
+  const [progressLoaded, setProgressLoaded] = useState(false);
 
-  // Telegram / демо-режим
+  /* ===== Telegram / демо-режим ===== */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -113,32 +127,125 @@ export default function Home() {
     }
   }, []);
 
-  // Цитата дня (учитываем админские в localStorage)
+  /* ===== Уроки: БД → кэш → хардкод ===== */
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
-      const pool: string[] = Array.isArray(saved) && saved.length ? saved : QUOTES;
-      setQuote(pool[Math.floor(Math.random() * pool.length)]);
-    } catch {
-      setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
-    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listLessons();
+        if (cancelled) return;
+
+        const mapped: Lesson[] = rows
+          .sort(
+            (
+              a: { order_index?: number | null; id: number },
+              b: { order_index?: number | null; id: number }
+            ) => (a.order_index ?? a.id) - (b.order_index ?? b.id)
+          )
+          .map((r) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
+
+        setLessons(mapped);
+        try {
+          localStorage.setItem('lessons_cache', JSON.stringify(mapped));
+        } catch {}
+      } catch {
+        const raw = localStorage.getItem('lessons_cache');
+        if (raw) {
+          try {
+            setLessons(JSON.parse(raw) as Lesson[]);
+          } catch {}
+        } else {
+          setLessons([
+            { id: 1, title: 'Крипта простыми словами' },
+            { id: 2, title: 'Арбитраж: как это работает' },
+            { id: 3, title: 'Риски, мифы и страхи' },
+            { id: 4, title: 'Главные ошибки новичков' },
+            { id: 5, title: 'Итог: как двигаться дальше' },
+            { id: 6, title: 'Дополнительная полезная информация', subtitle: 'Чек-листы, шпаргалки, ссылки…' },
+          ]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Поднять прогресс/ачивки/флаг all_completed из localStorage
+  /* ===== Цитата дня: БД → admin_quotes → запасной список ===== */
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('progress');
-      const ach = localStorage.getItem('achievements');
-      const all = localStorage.getItem('all_completed') === 'true';
-      if (saved) setProgress(JSON.parse(saved));
-      if (ach) setAchievements(JSON.parse(ach));
-      setAllCompleted(all);
-    } catch {
-      // ignore
-    }
+    (async () => {
+      try {
+        const q = await getRandomDailyQuote();
+        if (q) {
+          setQuote(q);
+          return;
+        }
+      } catch {}
+      try {
+        const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
+        const pool: string[] = Array.isArray(saved) && saved.length ? saved : QUOTES;
+        setQuote(pool[Math.floor(Math.random() * pool.length)]);
+      } catch {
+        setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+      }
+    })();
   }, []);
 
-  // Вспомогательные вычисления
+  // обновляем список из LS при возвращении во вкладку
+  useEffect(() => {
+    const refresh = () => {
+      try {
+        const raw = localStorage.getItem('progress');
+        if (raw) setProgress(JSON.parse(raw));
+      } catch {}
+    };
+    window.addEventListener('focus', refresh);
+    const onVis = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
+  /* ===== Прогресс: БД → LS ===== */
+  useEffect(() => {
+    const uid = getClientUid();
+    (async () => {
+      try {
+        const rows = await getUserProgress(uid);
+        if (rows?.length) {
+          const arr: Progress[] = rows.map((r) => ({
+            lesson_id: Number(r.lesson_id),
+            status: r.status === 'completed' ? 'completed' : 'pending',
+          }));
+          setProgress(arr);
+          try {
+            localStorage.setItem('progress', JSON.stringify(arr));
+          } catch {}
+        } else {
+          const raw = localStorage.getItem('progress');
+          if (raw) setProgress(JSON.parse(raw) as Progress[]);
+        }
+      } catch {
+        const raw = localStorage.getItem('progress');
+        if (raw) setProgress(JSON.parse(raw) as Progress[]);
+      }
+
+      // ачивки/флаг
+      try {
+        const ach = localStorage.getItem('achievements');
+        const all = localStorage.getItem('all_completed') === 'true';
+        if (ach) setAchievements(JSON.parse(ach));
+        setAllCompleted(all);
+      } catch {}
+
+      // И ВОТ ЗДЕСЬ — ПОМЕЧАЕМ, ЧТО ПРОГРЕСС ЗАГРУЗИЛСЯ
+      setProgressLoaded(true);
+    })();
+  }, []);
+
+  /* ===== Вычисления ===== */
   const isCompleted = (id: number) =>
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
@@ -146,8 +253,10 @@ export default function Home() {
   const completedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= 5).length;
   const bar = Math.min(100, Math.round((completedCount / coreLessonsCount) * 100));
 
-  // Авто-ачивки и сохранение
+  /* ===== Сохранение прогресса (LS + мягкая синхронизация в БД) ===== */
   useEffect(() => {
+    if (!progressLoaded) return; // ← не перезаписываем до первой загрузки
+
     const next = { ...achievements };
     if (isCompleted(1)) next.first = true;
     if (isCompleted(3)) next.risk = true;
@@ -167,10 +276,16 @@ export default function Home() {
     try {
       localStorage.setItem('progress', JSON.stringify(progress));
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress]);
 
-  // «Отметить как пройдено» (демо на главной; основной флоу — на странице урока)
+    (async () => {
+      try {
+        await saveUserProgress(getClientUid(), progress);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, progressLoaded]);
+
+  /* ===== «Отметить как пройдено» (демо на главной) ===== */
   const complete = (lessonId: number) => {
     setProgress((prev) => {
       const exists = prev.find((p) => p.lesson_id === lessonId);
@@ -181,12 +296,12 @@ export default function Home() {
     setPoints((x) => x + 10);
   };
 
-  // Уровень
+  /* ===== Уровень ===== */
   const xp = computeXP(completedCount, achievements);
   const { key: levelKey, progressPct } = computeLevel(xp);
   const level = LEVELS[levelKey];
 
-  // Метки ачивок над полосой
+  /* ===== Метки ачивок ===== */
   const markers = [
     { key: 'first', at: 20, icon: '💸', title: 'Первый арбитраж (после 1 урока)', achieved: achievements.first },
     { key: 'fast', at: 60, icon: '⚡', title: 'Быстрый старт (3 урока)', achieved: completedCount >= 3 },
@@ -207,7 +322,7 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-5">
-      {/* Presence: отмечаем активность на главной */}
+      {/* Presence: активность на главной */}
       <PresenceClient page="home" activity="Главная" progressPct={bar} />
 
       {/* Header */}
@@ -240,14 +355,16 @@ export default function Home() {
       <p className="text-sm text-[var(--muted)]">Привет, @{username || 'user'}!</p>
       <p className="mt-1 mb-2 text-sm italic text-[var(--muted)]">💡 {quote}</p>
 
-      {/* Статус-бар: метки → полоса → подписи */}
+      {/* Статус-бар */}
       <div className="mt-3">
         <div className="relative h-8 mb-2">
           {markers.map((m) => (
             <span
               key={m.key}
               title={m.title}
-              className={`absolute -translate-x-1/2 grid place-items-center w-7 h-7 rounded-full text-[13px] ${m.achieved ? '' : 'opacity-45'}`}
+              className={`absolute -translate-x-1/2 grid place-items-center w-7 h-7 rounded-full text-[13px] ${
+                m.achieved ? '' : 'opacity-45'
+              }`}
               style={{
                 left: `${m.at}%`,
                 top: 0,
@@ -283,7 +400,7 @@ export default function Home() {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="grid h-9 w-9 place-items-center rounded bg-[var(--brand-200)] border border-[var(--brand)] text-xl">
-                    {ICONS[l.id]}
+                    {ICONS[l.id] ?? '📘'}
                   </div>
                   <div>
                     <div className="text-[17px] font-semibold">{l.title}</div>
@@ -297,7 +414,6 @@ export default function Home() {
               </div>
 
               <div className="mt-3 flex items-center gap-3">
-                {/* Всегда ведём на страницу урока. 6-й модуль (материалы) блокируем до прохождения 1–5. */}
                 <button
                   className="btn-brand"
                   onClick={() => router.push(`/lesson/${l.id}`)}
@@ -307,7 +423,6 @@ export default function Home() {
                   {lockedExtra ? 'Закрыто' : 'Смотреть'}
                 </button>
 
-                {/* Доп. демо-кнопка «Отметить как пройдено» */}
                 {!done && l.id !== 6 && (
                   <button className="btn" onClick={() => complete(l.id)}>
                     Отметить как пройдено

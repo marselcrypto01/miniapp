@@ -1,17 +1,19 @@
+// components/PresenceClient.tsx
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { writePresence } from '@/lib/db';
 
 /** ===== Типы (то, что нужно админке) ===== */
 export type PresenceSession = {
   uid: string;
   username?: string | null;
-  page: string;            // 'home' | 'lesson' | 'admin' | ...
+  page: string;                 // 'home' | 'lesson' | 'admin' | ...
   activity?: string | null;
-  lessonId?: number;
+  lessonId?: number | null;
   progressPct?: number;
   isOnline: boolean;
-  updatedAt: number;       // ms
+  updatedAt: number;            // ms
 };
 
 export type PresenceProps = {
@@ -27,29 +29,29 @@ const UID_KEY = 'presence_uid';
 
 /** Безопасное чтение из LS */
 function safeParse<T>(raw: string | null, fallback: T): T {
-  try {
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
+  try { return raw ? (JSON.parse(raw) as T) : fallback; } catch { return fallback; }
 }
 
-/** Сгенерировать/получить uid браузера */
+/** Сгенерировать/получить uid браузера (общий с Home/lesson) */
 function getUid(): string {
-  let uid = localStorage.getItem(UID_KEY);
-  if (!uid) {
-    uid = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    try { localStorage.setItem(UID_KEY, uid); } catch {}
-  }
-  return uid;
+  let uid = '';
+  try {
+    uid = localStorage.getItem(UID_KEY) || '';
+    if (!uid) {
+      uid =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem(UID_KEY, uid);
+    }
+  } catch {}
+  return uid || 'anonymous';
 }
 
 /** Прочитать все сессии (используется в админке) */
 export function readPresenceStore(): PresenceSession[] {
   if (typeof window === 'undefined') return [];
   const arr = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
-  // лёгкая чистка мусора (оставим последние записи по uid)
   const byUid = new Map<string, PresenceSession>();
   for (const s of Array.isArray(arr) ? arr : []) {
     const prev = byUid.get(s.uid);
@@ -58,20 +60,27 @@ export function readPresenceStore(): PresenceSession[] {
   return [...byUid.values()];
 }
 
-/** Записать/обновить свою сессию */
-function upsertSession(partial: Partial<PresenceSession>) {
+/** Username из Telegram WebApp (если есть) */
+function getTgUsername(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
+  } catch { return null; }
+}
+
+/** Записать/обновить свою сессию в LS и отправить пинг в Supabase */
+async function upsertSession(partial: Partial<PresenceSession>) {
   const uid = getUid();
   const list = safeParse<PresenceSession[]>(localStorage.getItem(STORE_KEY), []);
   const meIdx = list.findIndex((x) => x.uid === uid);
-  const username =
-    (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
+  const username = getTgUsername();
 
   const next: PresenceSession = {
     uid,
     username,
     page: partial.page ?? (list[meIdx]?.page ?? 'unknown'),
     activity: partial.activity ?? list[meIdx]?.activity ?? null,
-    lessonId: partial.lessonId ?? list[meIdx]?.lessonId,
+    lessonId: partial.lessonId ?? list[meIdx]?.lessonId ?? null,
     progressPct: partial.progressPct ?? list[meIdx]?.progressPct,
     isOnline: partial.isOnline ?? true,
     updatedAt: Date.now(),
@@ -81,36 +90,54 @@ function upsertSession(partial: Partial<PresenceSession>) {
   else list.push(next);
 
   try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch {}
+
+  // ПИНГ в Supabase (fire-and-forget)
+  try {
+    await writePresence({
+      page: next.page,
+      activity: next.activity ?? undefined,       // string | undefined
+      lessonId: next.lessonId ?? null,            // number | null
+      progressPct: next.progressPct ?? undefined, // number | undefined
+      username: next.username ?? null,            // string | null
+    });
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('presence: supabase write error', e);
+  }
 }
 
-/** Клиентский компонент, который «пингует» админке наше состояние */
-export default function PresenceClient({
-  page,
-  activity,
-  lessonId,
-  progressPct,
-}: PresenceProps) {
+/** Клиентский компонент, который «пингует» состояние */
+export default function PresenceClient({ page, activity, lessonId, progressPct }: PresenceProps) {
   const timer = useRef<number | null>(null);
 
   useEffect(() => {
     // первая запись
-    upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
+    void upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
 
     // пинги раз в 15 сек
     timer.current = window.setInterval(() => {
-      upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
+      void upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
     }, 15000);
 
-    // при размонтировании/уходе — отметим оффлайн
+    // при возврате во вкладку — тоже пинганём
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void upsertSession({ page, activity, lessonId, progressPct, isOnline: true });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // при уходе — offline
     const handleUnload = () => {
-      upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
+      void upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
     };
     window.addEventListener('beforeunload', handleUnload);
 
     return () => {
       if (timer.current) window.clearInterval(timer.current);
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('beforeunload', handleUnload);
-      upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
+      void upsertSession({ page, activity, lessonId, progressPct, isOnline: false });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, activity, lessonId, progressPct]);

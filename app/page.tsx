@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
 import {
@@ -66,6 +66,7 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
+/* uid общий */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -82,6 +83,7 @@ function getClientUid(): string {
 export default function Home() {
   const router = useRouter();
 
+  // имя (first_name), а не username
   const [firstName, setFirstName] = useState<string | null>(null);
   const [env, setEnv] = useState<Env>('loading');
 
@@ -99,6 +101,7 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
+  /* ===== вычисления ===== */
   const isCompleted = (id: number) =>
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
@@ -122,7 +125,7 @@ export default function Home() {
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
   const bonusLessons = useMemo(() => lessons.filter(l => l.id >  CORE_LESSONS_COUNT), [lessons]);
 
-  // Detect Telegram + get first_name
+  /* ===== Telegram / демо-режим (берём имя) ===== */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -133,7 +136,8 @@ export default function Home() {
         const wa = (window as any)?.Telegram?.WebApp;
         if (wa) {
           try {
-            wa.ready(); wa.expand?.();
+            wa.ready();
+            wa.expand?.();
             const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
             if (!cancelled) {
               if (hasInit || demo) {
@@ -157,7 +161,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  // Lessons
+  /* ===== уроки ===== */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -193,7 +197,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  // Quote
+  /* ===== цитата ===== */
   useEffect(() => {
     (async () => {
       try {
@@ -210,18 +214,24 @@ export default function Home() {
     })();
   }, []);
 
-  // Refresh progress on focus
+  /* ===== обновлять прогресс при возврате ===== */
   useEffect(() => {
     const refresh = () => {
-      try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
+      try {
+        const raw = localStorage.getItem('progress');
+        if (raw) setProgress(JSON.parse(raw));
+      } catch {}
     };
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
-    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
 
-  // Load + persist progress
+  /* ===== прогресс: БД → LS ===== */
   useEffect(() => {
     const uid = getClientUid();
     (async () => {
@@ -254,6 +264,7 @@ export default function Home() {
     })();
   }, []);
 
+  /* ===== сохранить прогресс + ачивки ===== */
   useEffect(() => {
     if (!progressLoaded) return;
 
@@ -270,12 +281,14 @@ export default function Home() {
     const finished = completedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
     try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
+
     try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
 
     (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
+  /* ===== чип уровня ===== */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({
     pct, children, className,
   }) => {
@@ -302,6 +315,7 @@ export default function Home() {
     );
   };
 
+  /* ===== гейт ===== */
   if (env === 'loading') return null;
 
   if (env === 'browser') {
@@ -315,11 +329,13 @@ export default function Home() {
     );
   }
 
+  /* ===== разметка ===== */
   return (
-    <main className="mx-auto w-full max-w-[720px] px-4 py-4 overflow-x-hidden">
+    <main className="mx-auto w-full max-w-[430px] px-4 py-4 overflow-x-hidden">
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
-      <header className="mb-5">
+      {/* ======= ШАПКА ======= */}
+      <header className="mb-5 w-full">
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-[1.1]">
           Курс по заработку на крипте
         </h1>
@@ -341,7 +357,7 @@ export default function Home() {
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень */}
+        {/* очки + уровень — во всю ширину, одинаковая с минибаром */}
         <div className="mt-4 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-4 py-2 w-full justify-center">
@@ -356,7 +372,7 @@ export default function Home() {
         </div>
 
         {/* статус-бар */}
-        <div className="mt-3">
+        <div className="mt-3 w-full">
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
             <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
             {checkpoints.map((p, i) => (
@@ -374,8 +390,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки 2-колоночной сеткой */}
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+        {/* ачивки — компактная сетка, под размер текста, перенос 2–3 строки */}
+        <div className="mt-3 grid grid-flow-row auto-rows-min grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const,      icon: '👣', label: 'Первый шаг' },
             { key: 'unlock' as const,     icon: '🔓', label: 'Разблокировал знания' },
@@ -387,12 +403,12 @@ export default function Home() {
             return (
               <div
                 key={a.key}
-                className={`min-h-[38px] rounded-full border px-3 sm:px-4 flex items-center justify-center gap-2 text-[12px] sm:text-[13px] ${active ? '' : 'opacity-60'}`}
+                className={`inline-flex items-center justify-center gap-2 px-2.5 py-1 rounded-full border text-[12px] ${active ? '' : 'opacity-55'}`}
                 style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 title={a.label}
               >
-                <span className="text-[15px]">{a.icon}</span>
-                <span className="font-medium whitespace-nowrap">{a.label}</span>
+                <span className="text-[14px]">{a.icon}</span>
+                <span className="font-medium leading-none text-center">{a.label}</span>
               </div>
             );
           })}
@@ -400,7 +416,7 @@ export default function Home() {
       </header>
 
       {/* ===== Уроки ===== */}
-      <section>
+      <section className="w-full">
         <h2 className="text-xl sm:text-2xl font-bold mb-2">Уроки</h2>
 
         <div className="space-y-3">
@@ -474,7 +490,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ (как было) */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[

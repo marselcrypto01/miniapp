@@ -19,7 +19,7 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Единый контейнер под мини-бар: 360px */
+/** Единый контейнер: ровно как у нижнего мини-бара */
 const WRAP = 'mx-auto max-w-[360px] px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
@@ -114,7 +114,7 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* Telegram / demo (берём имя) */
+  /* Telegram / demo */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -346,7 +346,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — сетка 2×N, центр, обрезка «…» */}
+        {/* Ачивки — 2×N, текст не обрезаем, шрифт авто-уменьшается, максимум 2 строки, фикс. высота */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -359,11 +359,17 @@ export default function Home() {
             return (
               <div key={a.key} className="w-full">
                 <div
-                  className={`w-full px-3 py-1.5 rounded-full border flex items-center justify-center gap-1 text-xs ${active ? '' : 'opacity-55'}`}
+                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 ${active ? '' : 'opacity-55'} h-12`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
                   <span className="text-sm shrink-0">{a.icon}</span>
-                  <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{a.label}</span>
+                  <span
+                    className="font-medium text-center leading-[1.15] break-words overflow-hidden
+                               [font-size:clamp(12px,3.3vw,14px)]"
+                    style={{ display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical' }}
+                  >
+                    {a.label}
+                  </span>
                 </div>
               </div>
             );

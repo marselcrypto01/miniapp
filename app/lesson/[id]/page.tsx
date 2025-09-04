@@ -3,7 +3,7 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** Совпадает с мини-баром */
+/** Ровно как у мини-бара */
 const WRAP = 'mx-auto max-w-[360px] px-4';
 
 type Tab = 'desc' | 'test' | 'materials';
@@ -22,7 +22,6 @@ export default function LessonPage() {
   const id = Number(params?.id || 1);
 
   const [tab, setTab] = React.useState<Tab>('desc');
-
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
   return (
@@ -41,7 +40,7 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* Табы: 3 равные, 40–44px, бордер между ними */}
+      {/* Табы: 3 равные, 44px, бордер между ними */}
       <div className="w-full mb-3">
         <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[var(--border)]">
           {[
@@ -89,9 +88,9 @@ export default function LessonPage() {
         </section>
       )}
 
-      {/* Нижняя навигация — одна линия, общая высота 44–48px */}
-      <div className="mt-4 grid grid-cols-[auto_auto_1fr_1fr_auto] gap-2 w-full">
-        {/* Вторичные */}
+      {/* Нижняя навигация — гибкая сетка с переносами */}
+      <div className="mt-4 w-full flex flex-wrap items-stretch gap-2">
+        {/* Чипы слева */}
         <button
           onClick={() => router.push('/courses')}
           className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center gap-2 text-sm"
@@ -108,11 +107,11 @@ export default function LessonPage() {
           <span>🏠</span><span className="whitespace-nowrap">На главную</span>
         </button>
 
-        {/* Основные, одинаковой ширины */}
+        {/* Основные по центру: занимают максимум места и прижимаются между чипами и бейджем */}
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+          className="flex-1 min-w-[42%] h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
           title="Предыдущий"
         >
           <span>←</span><span className="whitespace-nowrap">Предыдущий</span>
@@ -120,13 +119,13 @@ export default function LessonPage() {
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm flex items-center justify-center gap-2"
+          className="flex-1 min-w-[42%] h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm flex items-center justify-center gap-2"
           title="Следующий"
         >
           <span className="whitespace-nowrap">Следующий</span><span>→</span>
         </button>
 
-        {/* Бейдж статуса (не кнопка) */}
+        {/* Бейдж статуса справа/в конце ряда */}
         <div className="px-3 h-11 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm">
           <span className="whitespace-nowrap">✔ Пройдено</span>
         </div>

@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
-// простая мапа заголовков (замените на ваши данные при необходимости)
+/** Заголовки (замените на свои при необходимости) */
 const TITLES: Record<number, string> = {
   1: 'Крипта простыми словами',
   2: 'Арбитраж: как это работает',
@@ -24,40 +24,41 @@ export default function LessonPage() {
 
   const title = useMemo(() => TITLES[id] || `Урок ${id}`, [id]);
 
-  const goBack = () => router.back();
   const goHome = () => router.push('/');
-  const goNext = () => router.push(`/lesson/${id + 1}`);
+  const goBack  = () => router.back();
+  const goNext  = () => router.push(`/lesson/${id + 1}`);
+  const goPrev  = () => router.push(`/lesson/${Math.max(1, id - 1)}`);
+
+  /** Сколько колонок в нижнем ряду действий */
+  const actionCols = id > 1 ? 4 : 3;
 
   return (
     <main className="mx-auto w-full max-w-[720px] px-4 py-4">
-      {/* ====== верхняя панель ====== */}
-      <header className="relative mb-4">
-        {/* левая кнопка «назад» */}
+
+      {/* ======== TOP BAR: [назад] [ЗАГОЛОВОК] [на главную] ======== */}
+      <header className="mb-4 grid grid-cols-[auto_1fr_auto] items-center gap-2">
         <button
           onClick={goBack}
-          className="absolute left-0 top-1.5 inline-flex items-center gap-2 text-[var(--fg)]/85 hover:text-[var(--fg)]"
+          className="inline-flex items-center gap-2 text-sm text-[var(--fg)]/85 hover:text-[var(--fg)]"
+          aria-label="Назад"
         >
-          <span className="text-lg">←</span>
-          <span className="text-sm">Назад</span>
+          <span className="text-lg leading-none">←</span>
+          <span>Назад</span>
         </button>
 
-        {/* по центру — название урока */}
-        <div className="text-center">
-          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
-            {title}
-          </h1>
-        </div>
+        <h1 className="text-center text-xl sm:text-2xl font-extrabold tracking-tight truncate px-2">
+          {title}
+        </h1>
 
-        {/* справа — на главную */}
         <button
           onClick={goHome}
-          className="absolute right-0 top-1.5 text-sm text-[var(--muted)] hover:text-[var(--fg)]"
+          className="text-sm text-[var(--muted)] hover:text-[var(--fg)]"
         >
           На главную
         </button>
       </header>
 
-      {/* ====== блок видео/контента ====== */}
+      {/* ======== Блок видео ======== */}
       <section className="glass rounded-[18px] p-4 mb-3">
         <div className="flex items-center gap-2 text-[15px] font-semibold">
           <span>🎬</span>
@@ -72,16 +73,18 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* ====== компактные табы ====== */}
+      {/* ======== ТАБЫ — один горизонтальный ряд (скроллится при нехватке места) ======== */}
       <div
         className="
-          mt-2 mb-3 inline-flex rounded-2xl border border-[var(--border)]
-          bg-[color-mix(in_oklab,var(--surface) 85%,transparent)] p-1 shadow-[0_6px_18px_rgba(0,0,0,.25)]
+          mt-2 mb-3 inline-flex w-full overflow-x-auto whitespace-nowrap
+          rounded-2xl border border-[var(--border)]
+          bg-[color-mix(in_oklab,var(--surface) 85%,transparent)] p-1
+          shadow-[0_6px_18px_rgba(0,0,0,.25)]
         "
       >
         {[
-          { k: 'desc' as TabKey, label: 'Описание', icon: '📝' },
-          { k: 'test' as TabKey, label: 'Тест', icon: '✅' },
+          { k: 'desc' as TabKey, label: 'Описание',  icon: '📝' },
+          { k: 'test' as TabKey, label: 'Тест',      icon: '✅' },
           { k: 'materials' as TabKey, label: 'Материалы', icon: '📎' },
         ].map((t) => {
           const active = tab === t.k;
@@ -103,7 +106,7 @@ export default function LessonPage() {
         })}
       </div>
 
-      {/* ====== контент табов ====== */}
+      {/* ======== Контент табов ======== */}
       {tab === 'desc' && (
         <div className="glass rounded-[18px] p-4">
           <p className="text-[14px] text-[var(--fg)]/90 mb-2">
@@ -139,30 +142,49 @@ export default function LessonPage() {
         </div>
       )}
 
-      {/* ====== блок действий (кнопки) ====== */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {/* ======== Нижний ряд действий — ВСЕГДА В РЯД ======== */}
+      <div
+        className="mt-4 gap-2"
+        style={{ display: 'grid', gridTemplateColumns: `repeat(${actionCols}, minmax(0,1fr))` }}
+      >
         <button
           onClick={() => router.push('/')}
           className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
             border border-[var(--border)] bg-[var(--surface)]
             shadow-[0_10px_26px_rgba(0,0,0,.25)]
             hover:brightness-105 active:translate-y-[1px]
-            text-[15px] font-semibold
+            text-[14px] font-semibold
           "
         >
           <span>📚</span>
-          <span>К списку уроков</span>
+          <span>К списку</span>
         </button>
+
+        {id > 1 && (
+          <button
+            onClick={goPrev}
+            className="
+              inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
+              border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)]
+              shadow-[0_10px_26px_rgba(0,0,0,.25)]
+              hover:brightness-105 active:translate-y-[1px]
+              text-[14px] font-semibold
+            "
+          >
+            <span>⬅️</span>
+            <span>Предыд.</span>
+          </button>
+        )}
 
         <button
           onClick={goNext}
           className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
             bg-[var(--brand)] text-black
             shadow-[0_10px_26px_rgba(0,0,0,.25)]
             hover:brightness-105 active:translate-y-[1px]
-            text-[15px] font-extrabold
+            text-[14px] font-extrabold
           "
         >
           <span>➡️</span>
@@ -172,11 +194,11 @@ export default function LessonPage() {
         <button
           onClick={() => alert('Отметили как пройдено ✓')}
           className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
             border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)]
             shadow-[0_10px_26px_rgba(0,0,0,.25)]
             hover:brightness-105 active:translate-y-[1px]
-            text-[15px] font-semibold
+            text-[14px] font-semibold
           "
         >
           <span>✅</span>

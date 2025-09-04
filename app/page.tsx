@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
 import {
@@ -145,9 +145,7 @@ export default function Home() {
             if (!cancelled) {
               if (hasInit || demo) {
                 setEnv('telegram');
-                const name =
-                  wa.initDataUnsafe?.user?.first_name ||
-                  (demo ? 'Друг' : null);
+                const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
                 setFirstName(name);
               } else {
                 setEnv('browser');
@@ -320,26 +318,6 @@ export default function Home() {
     );
   };
 
-  /* ===== состояние и логика стрелки-подсказки для ачивок ===== */
-  const achRef = useRef<HTMLDivElement | null>(null);
-  const [showAchHint, setShowAchHint] = useState(false);
-
-  useEffect(() => {
-    const el = achRef.current;
-    if (!el) return;
-    const update = () => {
-      const need = el.scrollWidth > el.clientWidth && el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
-      setShowAchHint(need);
-    };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    window.addEventListener('resize', update);
-    return () => {
-      el.removeEventListener('scroll', update);
-      window.removeEventListener('resize', update);
-    };
-  }, []);
-
   /* ===== гейт ===== */
   if (env === 'loading') return null;
 
@@ -415,41 +393,28 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ачивки — горизонтальная лента + стрелка-подсказка */}
-        <div className="mt-2 relative">
-          <div ref={achRef} className="overflow-x-auto pr-6">
-            <div className="inline-flex items-center gap-8 whitespace-nowrap">
-              {[
-                { key: 'first' as const,      icon: '👣', label: 'Первый шаг' },
-                { key: 'unlock' as const,     icon: '🔓', label: 'Разблокировал знания' },
-                { key: 'fear' as const,       icon: '🛡️', label: 'Победил страхи' },
-                { key: 'errors' as const,     icon: '✅', label: 'Ошибки повержены' },
-                { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
-              ].map(a => {
-                const active = achievements[a.key];
-                return (
-                  <div
-                    key={a.key}
-                    className={`chip px-2.5 py-1 text-[12px] leading-none ${active ? '' : 'opacity-55'}`}
-                    style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
-                    title={a.label}
-                  >
-                    <span className="text-[14px]">{a.icon}</span>
-                    <span className="font-medium">{a.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {showAchHint && (
-            <div className="pointer-events-none absolute inset-y-0 right-0 w-6 flex items-center justify-end">
-              <div className="h-6 w-6 flex items-center justify-center rounded-full"
-                   style={{ background: 'linear-gradient(90deg, rgba(39,39,39,0.95), transparent)' }}>
-                <span className="text-[var(--muted)] text-lg">›</span>
+        {/* ачивки — В РЯД С ПЕРЕНОСОМ (2–3 строки на мобилке) */}
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {[
+            { key: 'first' as const,      icon: '👣', label: 'Первый шаг' },
+            { key: 'unlock' as const,     icon: '🔓', label: 'Разблокировал знания' },
+            { key: 'fear' as const,       icon: '🛡️', label: 'Победил страхи' },
+            { key: 'errors' as const,     icon: '✅', label: 'Ошибки повержены' },
+            { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
+          ].map(a => {
+            const active = achievements[a.key];
+            return (
+              <div
+                key={a.key}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[11.5px] whitespace-nowrap ${active ? '' : 'opacity-55'}`}
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+                title={a.label}
+              >
+                <span className="text-[14px]">{a.icon}</span>
+                <span className="font-medium">{a.label}</span>
               </div>
-            </div>
-          )}
+            );
+          })}
         </div>
       </header>
 
@@ -531,7 +496,6 @@ export default function Home() {
       {/* ===== FAQ ===== */}
       <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
-        {/* … (оставил прежний список вопросов/ответов без изменений) … */}
         {[
           { q: 'А если у меня всего 10–20 тысяч — это вообще имеет смысл?', a: '👉 Да. Даже с минимальной суммой можно увидеть результат. Рекомендую начинать от 20 тысяч рублей — это комфортный старт, при котором уже будет ощутимый доход. Главное — понять механику, а дальше всё масштабируется.' },
           { q: 'Не поздно ли заходить в крипту в 2025 году?', a: '👉 Нет. Крипторынок продолжает расти, миллионы людей подключаются каждый год. Арбитраж работает, пока есть разница курсов и люди меняют валюту — а это всегда.' },

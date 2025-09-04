@@ -1,26 +1,25 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
-/** Совпадает с мини-баром */
+/** ширина = как у мини-бара через переменную в globals.css */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
 type FormatKey = 'group' | 'pro';
 
-/** чип */
+/* маленький чип-параметр */
 const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <span className="inline-flex items-center px-2.5 h-7 rounded-full text-[12px] whitespace-nowrap
-                   bg-[color-mix(in_oklab,var(--surface-2)60%,transparent)]
-                   border border-[var(--border)]">
+  <span
+    className="inline-flex items-center h-7 px-2.5 rounded-full text-[12px] whitespace-nowrap
+               bg-[color-mix(in_oklab,var(--surface-2)60%,transparent)]
+               border border-[var(--border)]"
+  >
     {children}
   </span>
 );
 
 export default function CoursesPage() {
-  const router = useRouter();
-
-  /* блокировать заявки, если курс не завершён */
+  /* блокировка CTA до прохождения базового курса (оставь/убери по необходимости) */
   const [locked, setLocked] = useState(true);
   useEffect(() => {
     try { setLocked(!(localStorage.getItem('all_completed') === 'true')); } catch {}
@@ -29,7 +28,7 @@ export default function CoursesPage() {
   /* аккордеоны */
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
 
-  /* сравнение (bottom sheet) и форма заявки (modal) */
+  /* bottom sheet и модалка заявки */
   const [sheet, setSheet] = useState(false);
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
@@ -41,56 +40,73 @@ export default function CoursesPage() {
       const u = wa?.initDataUnsafe?.user;
       if (!u) return null;
       return {
-        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || undefined,
-        username: u.username ? `@${u.username}` : undefined,
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
+        username: u.username ? `@${u.username}` : '',
       };
     } catch { return null; }
   }, []);
 
+  /* тексты форматов по ТЗ */
   const formats: Record<FormatKey, {
     title: string;
+    emoji: string;
     teaser: string;
+    chips: string[];
     bullets: string[];
     audience: string;
     result: string;
     time: string;
-    chips: string[];
-    emoji: string;
-    ctaNote: string;
+    price: string;
+    ctaNote?: string;
   }> = {
     group: {
       title: 'Групповой курс: Аренда за Крипту',
+      emoji: '🧑‍🤝‍🧑',
       teaser:
-        '1 неделя эфиров + практика. За месяц — первые стабильные сделки и доход, достаточный для аренды.',
+        '1 неделя эфиров + практика. Результат: доход от ~70 000 ₽/мес при стабильной работе с простыми связками.',
+      chips: ['⏱ 1 неделя', '🧑‍🤝‍🧑 Группа+чат', '🛟 Поддержка 3 нед.'],
       bullets: [
-        '5 эфиров (пн-пт) + 2 практических дня',
-        'Чек-листы, инструкции, разбор рисков',
-        'Доступ к закрытому боту с материалами',
+        '5 эфиров (пн–пт) + 2 практических дня',
+        'Таблицы учёта сделок и контроль ошибок',
+        '1 связка без карт (до ~2% к капиталу/день) и 2 связки с картами (до ~7%/день)',
+        '(цифры — ориентиры, не гарантия; зависит от дисциплины и лимитов)',
+        'Доступ к закрытому чату с материалами',
+        'Доступ к боту с ИИ-подсказками (по шагам, напоминания, разбор типовых ошибок)',
         'Поддержка в чате 3 недели',
       ],
-      audience: '«Полный ноль», кто хочет быстрый старт',
+      audience:
+        '«Полный новичок», кому нужен понятный старт и доход, который покрывает аренду/базовые расходы. Никто не уходит без работающего способа.',
       result:
-        'Понимаете механику арбитража, умеете делать сделки, выход на стабильный доход для аренды',
-      time: '1–2 часа в день, старт — еженедельно',
-      chips: ['⏱ 1 неделя эфиров', '🧑‍🤝‍🧑 Группа + чат', '🛟 Поддержка 3 недели'],
-      emoji: '👥',
+        'Базовая система арбитража: стабильный доход от ~70 000 ₽/мес, понимание рисков, умение масштабировать и адаптировать связки под себя. Это не одна «схема», а комплекс навыков и инструментов.',
+      time: '1–2 часа в день, старт — раз в месяц',
+      price: '50 000 ₽. Доступна официальная рассрочка Сбербанка.',
       ctaNote: 'Рассрочка через Сбер — по запросу',
     },
     pro: {
       title: 'Индивидуальное обучение: КриптоМарс PRO',
-      teaser:
-        '4 созвона 1:1, персональные связки, быстрый прогресс и бессрочная поддержка.',
-      bullets: [
-        'Диагностика и персональный план',
-        'Разбор ваших банков/платёжек и рисков',
-        'Настройка рабочих связок под ваш режим',
-        'Бессрочная поддержка и доступ в клуб',
-      ],
-      audience: 'Кому нужен быстрый результат и индивидуальный подход',
-      result: 'Выстроенная личная система, стабильные сделки, масштабирование',
-      time: 'График под вас, старт по договорённости',
-      chips: ['🎯 1:1 созвоны', '🧩 Личные связки', '♾ Бессрочно в поддержку'],
       emoji: '💼',
+      teaser:
+        'Личное обучение с Марселем. Ускоренный старт, доход со второго дня и бессрочная поддержка.',
+      chips: ['🎯 1:1 созвоны', '🧩 Личные связки', '♾ Бессрочная поддержка'],
+      bullets: [
+        'Индивидуальная диагностика и план под ваши цели',
+        '2 связки без карт (до ~3%/день) и 3 связки с картами (до ~10%/день)',
+        '(ориентиры; зависят от лимитов/дисциплины)',
+        'Заработок со 2-го дня обучения (после внедрения стартовой связки)',
+        'Таблица учёта + контроль рисков и лимитов',
+        'Масштабирование дохода: переход от «ручного» к системному',
+        'Бессрочная поддержка + доступ в Клуб',
+        'Чат с учениками — разбор кейсов, помощь в спорных ситуациях',
+        'Полезные материалы — мануалы, гайды, новые связки',
+        'Чат про мошенников — свежие схемы, как не попасться',
+        'Чат с проверенными офлайн-обменниками',
+      ],
+      audience:
+        'Тем, кому нужен быстрый и прогнозируемый результат, личный разбор банкинга/лимитов и настройка связок под ваш режим (график, банки, гео).',
+      result:
+        'Выстроенная личная система заработка, выход на доход до ~200 000 ₽/мес и план масштабирования. Постоянная связь и поддержка без срока.',
+      time: 'График под вас, старт — по договорённости',
+      price: '90 000 ₽. Доступна официальная рассрочка Сбербанка.',
       ctaNote: 'Рассрочка — по запросу',
     },
   };
@@ -103,15 +119,15 @@ export default function CoursesPage() {
       <header className="mb-3 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Следующий шаг</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          После завершения базового курса доступны расширенные программы обучения.
+          Показаны два формата обучения. Коротко — в карточках, детали — по «Подробнее».
         </p>
       </header>
 
-      {/* Сравнить форматы */}
+      {/* Кнопка сравнения */}
       <div className="w-full mb-3">
         <button
           onClick={() => setSheet(true)}
-          className="w-full h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)]
+          className="w-full h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)]
                      text-sm font-semibold active:translate-y-[1px]"
         >
           Сравнить форматы
@@ -127,95 +143,108 @@ export default function CoursesPage() {
           return (
             <article
               key={key}
-              className={`glass rounded-2xl w-full transition-shadow ${expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''}`}
+              className={`card w-full space-y-3 rounded-2xl ${expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''}`}
             >
-              {/* Шапка карточки */}
-              <div className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className="grid place-items-center text-xl w-10 h-10 rounded-lg bg-[var(--surface-2)] border border-[var(--border)]">
-                    {f.emoji}
+              {/* Верхняя часть: иконка + заголовок + тизер + чипы + две кнопки */}
+              <div className="grid grid-cols-[40px_1fr] gap-3">
+                {/* Иконка — строго 40×40 */}
+                <div className="w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[18px] leading-none">
+                  {f.emoji}
+                </div>
+
+                <div className="min-w-0">
+                  <h3 className="text-[18px] font-semibold leading-tight">{f.title}</h3>
+
+                  {/* тизер — без …, но clamp до 2 строк */}
+                  <p
+                    className="mt-1 text-[14px] text-[var(--muted)] leading-snug overflow-hidden"
+                    style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                  >
+                    {f.teaser}
+                  </p>
+
+                  {/* чипы в одну строку со скроллом */}
+                  <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">
+                    {f.chips.map((c, i) => <Chip key={i}>{c}</Chip>)}
                   </div>
-                  <div className="min-w-0 grow">
-                    <div className="font-semibold text-[18px] leading-tight">{f.title}</div>
 
-                    {/* тизер — 2 строки, clamp */}
-                    <p
-                      className="mt-1 text-[14px] text-[var(--muted)] leading-snug overflow-hidden"
-                      style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                  {/* две равные кнопки */}
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      disabled={locked}
+                      onClick={() => openForm(key)}
+                      className={`h-11 w-full rounded-xl font-semibold border
+                                  ${locked
+                                    ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                                    : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                     >
-                      {f.teaser}
-                    </p>
-
-                    {/* чипы — одна строка со скроллом */}
-                    <div className="mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                      {f.chips.map((c, i) => <Chip key={i}>{c}</Chip>)}
-                    </div>
-
-                    {/* CTA в шапке: мини-кнопки */}
-                    <div className="mt-3 flex items-center gap-2">
-                      <button
-                        disabled={locked}
-                        onClick={() => openForm(key)}
-                        className={`h-9 px-3 rounded-lg text-sm font-semibold border
-                                    ${locked
-                                      ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                                      : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
-                      >
-                        {locked ? 'После курса' : 'Заявка'}
-                      </button>
-                      <button
-                        onClick={() => setOpen((s) => ({ ...s, [key]: !expanded }))}
-                        className="h-9 px-3 rounded-lg text-sm font-semibold border border-[var(--border)]
-                                   bg-[var(--surface)] active:translate-y-[1px]"
-                      >
-                        {expanded ? 'Свернуть' : 'Подробнее'}
-                      </button>
-                    </div>
+                      {locked ? 'После курса' : 'Заявка'}
+                    </button>
+                    <button
+                      onClick={() => setOpen((s) => ({ ...s, [key]: !expanded }))}
+                      className="h-11 w-full rounded-xl font-semibold border border-[var(--border)]
+                                 bg-[var(--surface)] active:translate-y-[1px]"
+                    >
+                      {expanded ? 'Свернуть' : 'Подробнее'}
+                    </button>
                   </div>
                 </div>
               </div>
 
-              {/* Разворот */}
+              {/* Развёрнутый контент */}
               {expanded && (
-                <div className="px-4 pb-4 pt-0">
-                  <div className="h-px w-full bg-[var(--border)] mb-3" />
-
-                  <div className="space-y-3 text-[14px]">
-                    <div>
-                      <div className="font-semibold mb-1">Что внутри</div>
-                      <ul className="list-disc pl-5 space-y-1">
-                        {f.bullets.map((b, i) => <li key={i}>{b}</li>)}
-                      </ul>
-                    </div>
-
-                    <div>
-                      <div className="font-semibold mb-1">Для кого</div>
-                      <p className="text-[var(--muted)]">{f.audience}</p>
-                    </div>
-
-                    <div>
-                      <div className="font-semibold mb-1">Результат</div>
-                      <p className="text-[var(--muted)]">{f.result}</p>
-                    </div>
-
-                    <div>
-                      <div className="font-semibold mb-1">Время и требования</div>
-                      <p className="text-[var(--muted)]">{f.time}</p>
-                    </div>
+                <div className="pt-3 border-t border-[var(--border)] space-y-3">
+                  {/* Что внутри */}
+                  <div>
+                    <div className="font-semibold mb-1">Что внутри</div>
+                    <ul className="list-disc pl-5 space-y-1 text-[14px]">
+                      {f.bullets.map((b, i) => (
+                        <li key={i}>
+                          {/* подчёркиваем цифры жирным — простое эвристическое правило */}
+                          {b.replace(/(~?\d+ ?[%₽]|[0-9]+ ?дня|[0-9]+ ?нед(?:ели|\.))/g, (m) => `**${m}**`)}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
 
-                  {/* Большой CTA в развороте */}
+                  {/* Для кого */}
+                  <div>
+                    <div className="font-semibold mb-1">Для кого</div>
+                    <p className="text-[14px] text-[var(--muted)]">{f.audience}</p>
+                  </div>
+
+                  {/* Результат */}
+                  <div>
+                    <div className="font-semibold mb-1">Результат</div>
+                    <p className="text-[14px] text-[var(--muted)]">{f.result}</p>
+                  </div>
+
+                  {/* Время и требования */}
+                  <div>
+                    <div className="font-semibold mb-1">Время и требования</div>
+                    <p className="text-[14px] text-[var(--muted)]">{f.time}</p>
+                  </div>
+
+                  {/* Цена */}
+                  <div>
+                    <div className="font-semibold mb-1">Цена</div>
+                    <p className="text-[14px] text-[var(--muted)]">{f.price}</p>
+                  </div>
+
+                  {/* большой CTA */}
                   <button
                     disabled={locked}
                     onClick={() => openForm(key)}
-                    className={`mt-3 w-full h-11 rounded-xl font-semibold border
+                    className={`mt-1 w-full h-11 rounded-xl font-semibold border
                                 ${locked
                                   ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                                   : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                   >
-                    {locked ? 'Доступ после прохождения курса' : 'Оставить заявку'}
+                    {locked ? 'После курса' : 'Оставить заявку'}
                   </button>
-                  <p className="mt-1 text-xs text-center text-[var(--muted)]">{f.ctaNote}</p>
+                  {f.ctaNote && (
+                    <p className="text-xs text-center text-[var(--muted)]">{f.ctaNote}</p>
+                  )}
                 </div>
               )}
             </article>
@@ -225,7 +254,7 @@ export default function CoursesPage() {
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
 
-      {/* ───────── Bottom Sheet: сравнение форматов ───────── */}
+      {/* ───────── bottom sheet «Сравнить форматы» ───────── */}
       {sheet && (
         <div className="fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSheet(false)} />
@@ -242,10 +271,13 @@ export default function CoursesPage() {
                 ['Поддержка', '3 недели', 'Бессрочно'],
                 ['Для кого', 'Старт с нуля', 'Быстрый рост'],
                 ['Результат', 'Первые сделки', 'Система + масштаб'],
-                ['Оплата', 'Разовая / рассрочка', 'Рассрочка по запросу'],
+                ['Оплата', 'Разовая / рассрочка', 'Разовая / рассрочка'],
               ].map((row, i) => (
-                <div key={i} className="grid grid-cols-1 gap-1 rounded-xl border border-[var(--border)] p-2
-                                        min-[420px]:grid-cols-[1.1fr_.9fr_.9fr]">
+                <div
+                  key={i}
+                  className="grid grid-cols-1 gap-1 rounded-xl border border-[var(--border)] p-2
+                             min-[420px]:grid-cols-[1.05fr_.95fr_.95fr]"
+                >
                   <div className="font-semibold">{row[0]}</div>
                   <div className="text-[var(--muted)]">{row[1]}</div>
                   <div className="text-[var(--muted)]">{row[2]}</div>
@@ -255,38 +287,37 @@ export default function CoursesPage() {
 
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
-                className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold
+                className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold
                            border border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]"
-                onClick={() => { setSheet(false); openForm('group'); }}
+                onClick={() => { setSheet(false); setFormOpen('group'); }}
               >
-                Заявка на группу
+                Заявка на групповой курс
               </button>
               <button
-                className="h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold active:translate-y-[1px]"
-                onClick={() => { setSheet(false); openForm('pro'); }}
+                className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold active:translate-y-[1px]"
+                onClick={() => { setSheet(false); setFormOpen('pro'); }}
               >
-                Заявка 1:1
+                Заявка на обучение 1:1
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ───────── Модалка «Оставить заявку» ───────── */}
+      {/* ───────── модалка «Оставить заявку» ───────── */}
       {formOpen && (
         <FormModal
           formatKey={formOpen}
           title={formats[formOpen].title}
           onClose={() => setFormOpen(null)}
           locked={locked}
-          tgName={tgUser?.name}
-          tgUsername={tgUser?.username}
+          tgName={tgUser?.name || ''}
+          tgUsername={tgUser?.username || ''}
           onSubmit={(payload) => {
-            // TODO: сюда поставь свой webhook/бота
+            // TODO: сюда подключи свой webhook/бота
             console.log('REQUEST:', payload);
             alert('Заявка отправлена ✨ Мы свяжемся в Telegram.');
             setFormOpen(null);
-            // router.push('/consult'); // если нужно редиректить
           }}
         />
       )}
@@ -294,26 +325,26 @@ export default function CoursesPage() {
   );
 }
 
-/* ───────── ФОРМА ЗАЯВКИ ───────── */
+/* ───────── форма заявки ───────── */
 function FormModal(props: {
   formatKey: FormatKey;
   title: string;
   locked: boolean;
-  tgName?: string;
-  tgUsername?: string;
+  tgName: string;
+  tgUsername: string;
   onClose: () => void;
   onSubmit: (payload: {
     format: FormatKey;
-    name?: string;
-    handle?: string;
-    phone?: string;
-    start?: string;
-    comment?: string;
+    name: string;
+    handle: string;
+    phone: string;
+    start: 'now' | 'month' | 'unsure';
+    comment: string;
     agree: boolean;
   }) => void;
 }) {
-  const [name, setName] = useState(props.tgName || '');
-  const [handle, setHandle] = useState(props.tgUsername || '');
+  const [name, setName] = useState(props.tgName);
+  const [handle, setHandle] = useState(props.tgUsername);
   const [phone, setPhone] = useState('');
   const [start, setStart] = useState<'now' | 'month' | 'unsure'>('now');
   const [comment, setComment] = useState('');
@@ -321,23 +352,20 @@ function FormModal(props: {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agree) return;
+    if (!agree || props.locked) return;
     props.onSubmit({
       format: props.formatKey,
-      name,
-      handle,
-      phone,
-      start,
-      comment,
-      agree,
+      name, handle, phone, start, comment, agree,
     });
   };
 
   return (
     <div className="fixed inset-0 z-[70]">
       <div className="absolute inset-0 bg-black/50" onClick={props.onClose} />
-      <div className="absolute left-1/2 -translate-x-1/2 top-6 w-[min(92vw, var(--content-max))] rounded-2xl
-                      bg-[var(--surface)] border border-[var(--border)] p-4">
+      <div
+        className="absolute left-1/2 -translate-x-1/2 top-6 w-[min(92vw,420px)]
+                   rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4"
+      >
         <div className="text-lg font-bold">Оставить заявку</div>
         <p className="text-sm text-[var(--muted)] mt-0.5">{props.title}</p>
 
@@ -345,7 +373,7 @@ function FormModal(props: {
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Имя</label>
             <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
               value={name} onChange={(e)=>setName(e.target.value)} placeholder="Как к вам обращаться"
             />
           </div>
@@ -353,7 +381,7 @@ function FormModal(props: {
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Ник/телеграм</label>
             <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
               value={handle} onChange={(e)=>setHandle(e.target.value)} placeholder="@username"
             />
           </div>
@@ -361,7 +389,7 @@ function FormModal(props: {
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Телефон (опционально)</label>
             <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
               value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="+7…"
             />
           </div>
@@ -369,7 +397,7 @@ function FormModal(props: {
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Удобный старт</label>
             <select
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
               value={start} onChange={(e)=>setStart(e.target.value as any)}
             >
               <option value="now">на этой неделе</option>
@@ -381,7 +409,8 @@ function FormModal(props: {
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Комментарий (опционально)</label>
             <textarea
-              className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)] outline-none resize-y"
+              className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)]
+                         outline-none resize-y w-full"
               value={comment} onChange={(e)=>setComment(e.target.value)} placeholder="Коротко о задаче, опыте, банках…"
             />
           </div>
@@ -395,14 +424,14 @@ function FormModal(props: {
             <button
               type="button"
               onClick={props.onClose}
-              className="h-10 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold"
+              className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold w-full"
             >
               Отмена
             </button>
             <button
               type="submit"
               disabled={!agree || props.locked}
-              className={`h-10 rounded-xl font-semibold border
+              className={`h-11 rounded-xl font-semibold border w-full
                 ${(!agree || props.locked)
                   ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                   : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
@@ -412,7 +441,7 @@ function FormModal(props: {
           </div>
 
           <p className="text-xs text-center text-[var(--muted)] pt-1">
-            После отправки мы свяжемся с вами в Telegram
+            После отправки мы свяжемся с вами в Telegram.
           </p>
         </form>
       </div>

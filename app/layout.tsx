@@ -30,27 +30,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               var params = new URLSearchParams(location.search);
               var askedAdminParam = params.get('startapp');
               var tries = 0;
-              function tick() {
+
+              function go() {
                 try {
                   var wa = window.Telegram && window.Telegram.WebApp;
+                  if (wa && typeof wa.ready === 'function') {
+                    try { wa.ready(); } catch (e) {}
+                  }
+
                   var username = wa && wa.initDataUnsafe && wa.initDataUnsafe.user && wa.initDataUnsafe.user.username;
                   var startParam = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
 
                   var isAdminUser = username && username.toLowerCase && username.toLowerCase() === 'marselv1';
                   var askedAdmin = (askedAdminParam && askedAdminParam.toLowerCase() === 'admin') ||
-                                   (startParam && startParam.toLowerCase() === 'admin');
+                                  (startParam && startParam.toLowerCase() === 'admin');
 
                   if (isAdminUser && askedAdmin && location.pathname !== '/admin') {
                     location.replace('/admin');
                     return;
                   }
                 } catch (e) {}
-                if (++tries < 20) setTimeout(tick, 100);
+                // пробуем подольше: до ~6 секунд
+                if (++tries < 60) setTimeout(go, 100);
               }
-              tick();
+              go();
             } catch (e) {}
           })();
         `}</Script>
+
       </head>
 
       <body

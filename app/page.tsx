@@ -36,15 +36,16 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
-/* ===== уровни (новая шкала) ===== */
+/* уровни (новая шкала) */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
-  novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
-  megagood: { title: 'Мегахорош', threshold: 40, icon: '💪' },
-  almostpro: { title: 'ПочтиПрофи', threshold: 80, icon: '⚡' },
+  novice:     { title: 'Новичок',     threshold: 0,   icon: '🌱' },
+  megagood:   { title: 'Мегахорош',   threshold: 40,  icon: '💪' },
+  almostpro:  { title: 'ПочтиПрофи',  threshold: 80,  icon: '⚡' },
   arbitrager: { title: 'Арбитражник', threshold: 120, icon: '🎯' },
   cryptoboss: { title: 'Крипто-босс', threshold: 160, icon: '👑' },
 };
+
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
   let xp = completedCount * 20;
   if (ach.first) xp += 5;
@@ -102,15 +103,12 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* ========= ВСЕ useMemo/переменные ДО любых return ========= */
+  /* ===== вычисления (всегда до условных return) ===== */
   const isCompleted = (id: number) =>
     progress.find((p) => p.lesson_id === id)?.status === 'completed';
 
   const completedCount = useMemo(
-    () =>
-      progress.filter(
-        (p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT
-      ).length,
+    () => progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
     [progress]
   );
 
@@ -126,8 +124,8 @@ export default function Home() {
     []
   );
 
-  const coreLessons = useMemo(() => lessons.filter((l) => l.id <= CORE_LESSONS_COUNT), [lessons]);
-  const bonusLessons = useMemo(() => lessons.filter((l) => l.id > CORE_LESSONS_COUNT), [lessons]);
+  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
+  const bonusLessons = useMemo(() => lessons.filter(l => l.id >  CORE_LESSONS_COUNT), [lessons]);
 
   /* ===== Telegram / демо-режим ===== */
   useEffect(() => {
@@ -161,9 +159,7 @@ export default function Home() {
     };
 
     void detect();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   /* ===== Загрузка уроков + переименование 1–5 ===== */
@@ -184,12 +180,10 @@ export default function Home() {
           4: '5 ошибок новичков, которые убивают заработок',
           5: 'Финал: твой первый шаг в мир крипты',
         };
-        const patched = mapped.map((m) => (names[m.id] ? { ...m, title: names[m.id] } : m));
+        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
 
         setLessons(patched);
-        try {
-          localStorage.setItem('lessons_cache', JSON.stringify(patched));
-        } catch {}
+        try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
       } catch {
         setLessons([
           { id: 1, title: 'Крипта без сложных слов: что это и зачем тебе' },
@@ -201,9 +195,7 @@ export default function Home() {
         ]);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   /* ===== Цитата дня ===== */
@@ -211,10 +203,7 @@ export default function Home() {
     (async () => {
       try {
         const q = await getRandomDailyQuote();
-        if (q) {
-          setQuote(q);
-          return;
-        }
+        if (q) { setQuote(q); return; }
       } catch {}
       try {
         const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
@@ -255,9 +244,7 @@ export default function Home() {
             status: r.status === 'completed' ? 'completed' : 'pending',
           }));
           setProgress(arr);
-          try {
-            localStorage.setItem('progress', JSON.stringify(arr));
-          } catch {}
+          try { localStorage.setItem('progress', JSON.stringify(arr)); } catch {}
         } else {
           const raw = localStorage.getItem('progress');
           if (raw) setProgress(JSON.parse(raw) as Progress[]);
@@ -290,33 +277,21 @@ export default function Home() {
     if (completedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
 
     setAchievements(next);
-    try {
-      localStorage.setItem('achievements', JSON.stringify(next));
-    } catch {}
+    try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
 
     const finished = completedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
-    try {
-      localStorage.setItem('all_completed', finished ? 'true' : 'false');
-    } catch {}
+    try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
 
-    try {
-      localStorage.setItem('progress', JSON.stringify(progress));
-    } catch {}
+    try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
 
-    (async () => {
-      try {
-        await saveUserProgress(getClientUid(), progress);
-      } catch {}
-    })();
+    (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* ===== Чип уровня с ровной вертикальной заливкой бордера ===== */
+  /* ===== Чип уровня: вертикальная заливка бордера ===== */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({
-    pct,
-    children,
-    className,
+    pct, children, className,
   }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
@@ -331,14 +306,17 @@ export default function Home() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-full bg-[color-mix(in_oklab,var(--surface) 85%,transparent)]">
+        <div
+          className="flex items-center justify-center gap-2 px-4 py-2 rounded-full"
+          style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
+        >
           {children}
         </div>
       </div>
     );
   };
 
-  /* ===== Гейт рендеринга ===== */
+  /* ===== гейт ===== */
   if (env === 'loading') return null;
 
   if (env === 'browser') {
@@ -352,7 +330,7 @@ export default function Home() {
     );
   }
 
-  /* ===== Разметка ===== */
+  /* ===== разметка ===== */
   return (
     <main className="mx-auto w-full max-w-[720px] px-4 py-4 overflow-x-hidden">
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
@@ -367,12 +345,15 @@ export default function Home() {
         <p className="mt-3 text-[13px] sm:text-sm text-[var(--muted)]">Привет, @{username || 'user'}!</p>
 
         <blockquote
-          className="mt-2 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 85%,transparent)] p-3 text-[13px] sm:text-sm italic text-[var(--muted)]"
-          style={{ boxShadow: 'var(--shadow)', borderLeftWidth: '4px', borderLeftColor: 'var(--brand)' }}
+          className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] sm:text-sm italic text-[var(--muted)]"
+          style={{
+            boxShadow: 'var(--shadow)',
+            borderLeftWidth: '4px',
+            borderLeftColor: 'var(--brand)',
+            background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)',
+          }}
         >
-          <span className="mr-1">“</span>
-          {quote}
-          <span className="ml-1">”</span>
+          <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
         {/* очки + уровень — во всю ширину */}
@@ -403,37 +384,35 @@ export default function Home() {
             ))}
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-            <span>
-              Пройдено: {completedCount}/{CORE_LESSONS_COUNT}
-            </span>
+            <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
             <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
           </div>
         </div>
 
-        {/* ачивки — переносятся и занимают всю ширину */}
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {[
-            { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
-            { key: 'unlock' as const, icon: '🔓', label: 'Разблокировал знания' },
-            { key: 'fear' as const, icon: '🛡️', label: 'Победил страхи' },
-            { key: 'errors' as const, icon: '✅', label: 'Ошибки повержены' },
-            { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
-          ].map((a) => {
-            const active = achievements[a.key];
-            return (
-              <div
-                key={a.key}
-                className={`px-2 py-1 rounded-full border text-[12px] flex items-center gap-1 ${
-                  active ? '' : 'opacity-45'
-                }`}
-                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
-                title={a.label}
-              >
-                <span>{a.icon}</span>
-                <span className="font-medium">{a.label}</span>
-              </div>
-            );
-          })}
+        {/* ачивки — компактная горизонтальная лента */}
+        <div className="mt-2 overflow-x-auto no-scrollbar">
+          <div className="inline-flex items-center gap-8 whitespace-nowrap">
+            {[
+              { key: 'first' as const,      icon: '👣', label: 'Первый шаг' },
+              { key: 'unlock' as const,     icon: '🔓', label: 'Разблокировал знания' },
+              { key: 'fear' as const,       icon: '🛡️', label: 'Победил страхи' },
+              { key: 'errors' as const,     icon: '✅', label: 'Ошибки повержены' },
+              { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
+            ].map(a => {
+              const active = achievements[a.key];
+              return (
+                <div
+                  key={a.key}
+                  className={`chip px-2.5 py-1 text-[12px] leading-none ${active ? '' : 'opacity-55'}`}
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+                  title={a.label}
+                >
+                  <span className="text-[14px]">{a.icon}</span>
+                  <span className="font-medium">{a.label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </header>
 
@@ -444,7 +423,7 @@ export default function Home() {
         <div className="space-y-3">
           {coreLessons.map((l, idx) => {
             const done = isCompleted(l.id);
-            const mins = ({ 1: 7, 2: 9, 3: 8, 4: 6, 5: 10 } as Record<number, number>)[l.id] ?? 6;
+            const mins = ({1:7,2:9,3:8,4:6,5:10} as Record<number, number>)[l.id] ?? 6;
             return (
               <div
                 key={l.id}
@@ -488,9 +467,9 @@ export default function Home() {
 
         <div
           className="
-          grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
-          grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr_auto]
-        "
+            grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
+            grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr_auto]
+          "
         >
           <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
             📚

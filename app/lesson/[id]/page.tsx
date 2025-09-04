@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** ТОЧНО как у бара */
-const WRAP = 'mx-auto max-w-xl px-4';
+/** Та же авто-ширина по краям, что у главной */
+const WRAP = 'w-screen px-[var(--edge-x,16px)]';
 
 export default function LessonPage() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export default function LessonPage() {
 
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Верхняя навигация */}
+      {/* Верх */}
       <div className="flex items-center justify-between gap-2 mb-3 w-full">
         <button onClick={() => router.back()} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
           <span>←</span><span className="font-semibold">Назад</span>
@@ -55,16 +55,15 @@ export default function LessonPage() {
         </ul>
       </section>
 
-      {/* Нижняя навигация — квадратные иконки, стрелки без текста */}
+      {/* Низ: квадратные иконки */}
       <div className="mt-4 grid grid-cols-4 gap-2 w-full">
         <button
           onClick={() => router.push('/')}
           className="h-12 rounded-xl border border-[var(--border)] bg-[var(--surface)] grid place-items-center text-base"
-          title="К списку уроков"
+          title="К списку"
         >
           📚
         </button>
-
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
@@ -73,7 +72,6 @@ export default function LessonPage() {
         >
           ←
         </button>
-
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
           className="h-12 rounded-xl bg-[var(--brand)] text-black font-semibold text-base grid place-items-center"
@@ -81,10 +79,9 @@ export default function LessonPage() {
         >
           →
         </button>
-
         <button
           className="h-12 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-base"
-          title="Отметить пройдено"
+          title="Пройдено"
         >
           ✔
         </button>

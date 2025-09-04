@@ -16,7 +16,10 @@
   --brand:#d4aa7d;
   --brand-200:#efd09e;
 
-  --edge-x:16px;
+  /* поля по краям контента — синхронизируются с нижним баром */
+  --edge-left:16px;
+  --edge-right:16px;
+
   --radius-sm:12px;
   --radius:18px;
   --radius-lg:22px;
@@ -27,7 +30,7 @@ html, body { height: 100%; overflow-x: hidden; }
 main { overflow-x: hidden; }
 
 /* ───────── База ───────── */
-html,body{height:100%;overflow-x:hidden;} /* выключаем горизонтальный скролл везде */
+html,body{height:100%;overflow-x:hidden;}
 html{color-scheme:dark;}
 *{box-sizing:border-box;}
 *::selection{background:color-mix(in oklab,var(--brand-200) 35%,transparent);color:var(--fg);}
@@ -46,6 +49,16 @@ img,video{max-width:100%;height:auto;display:block;}
 button{font:inherit;cursor:pointer;}
 
 .container{width:100%;max-width:var(--container-w);margin-inline:auto;padding-inline:16px;}
+
+/* ───────── Обёртка страниц в ширину нижнего бара ───────── */
+/* ЭТО ГЛАВНОЕ: края контента = краям внутреннего контейнера бара */
+.page-wrap{
+  width:100vw;
+  max-width:none;
+  margin:0 auto;
+  padding-left:var(--edge-left);
+  padding-right:var(--edge-right);
+}
 
 /* ───────── Карточки / панели ───────── */
 .card{

@@ -1,219 +1,190 @@
-// app/lesson/[id]/page.tsx
 'use client';
 
-import React, { use, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import PresenceClient from '@/components/PresenceClient';
-import { getLessonById } from '@/lib/lessons';
-import { getUserProgress, saveUserProgress } from '@/lib/db';
+import React, { useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 
-type Progress = { lesson_id: number; status: 'completed' | 'pending' };
+// простая мапа заголовков (замените на ваши данные при необходимости)
+const TITLES: Record<number, string> = {
+  1: 'Крипта простыми словами',
+  2: 'Арбитраж: как это работает',
+  3: 'Риски, мифы и страхи',
+  4: 'Главные ошибки новичков',
+  5: 'Итог: как двигаться дальше',
+  6: 'Дополнительные материалы',
+};
+
 type TabKey = 'desc' | 'test' | 'materials';
 
-// тот же uid, что использует PresenceClient/Home
-const UID_KEY = 'presence_uid';
-function getClientUid(): string {
-  try {
-    let uid = localStorage.getItem(UID_KEY);
-    if (!uid) {
-      uid =
-        (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem(UID_KEY, uid);
-    }
-    return uid;
-  } catch {
-    return 'anonymous';
-  }
-}
-
-export default function LessonPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params); // Next 15: params — Promise
-  const idNum = Number(id);
-
-  const meta = getLessonById(idNum);
-  const hasTest = !!meta?.hasTest;
-
-  const tabs = useMemo<TabKey[]>(
-    () => (hasTest ? ['desc', 'test', 'materials'] : ['desc', 'materials']),
-    [hasTest]
-  );
+export default function LessonPage() {
+  const router = useRouter();
+  const params = useParams<{ id: string }>();
+  const id = Number(params?.id ?? 1);
 
   const [tab, setTab] = useState<TabKey>('desc');
-  const [progress, setProgress] = useState<Progress[]>([]);
-  const [saving, setSaving] = useState(false);
 
-  // строгий parse из LS
-  function readProgressLS(): Progress[] {
-    try {
-      const raw = localStorage.getItem('progress');
-      if (!raw) return [];
-      const arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return [];
-      return arr
-        .map((r: any) => {
-          const lesson_id = Number(r?.lesson_id);
-          const status: Progress['status'] = r?.status === 'completed' ? 'completed' : 'pending';
-          return Number.isFinite(lesson_id) ? { lesson_id, status } : null;
-        })
-        .filter(Boolean) as Progress[];
-    } catch {
-      return [];
-    }
-  }
+  const title = useMemo(() => TITLES[id] || `Урок ${id}`, [id]);
 
-  // Загрузка прогресса: сначала из БД, иначе — из LS
-  useEffect(() => {
-    const uid = getClientUid();
-    (async () => {
-      try {
-        const rows = await getUserProgress(uid);
-        if (rows && rows.length) {
-          const arr: Progress[] = rows.map((r) => ({
-            lesson_id: Number(r.lesson_id),
-            status: r.status === 'completed' ? 'completed' : 'pending',
-          }));
-          setProgress(arr);
-          try {
-            localStorage.setItem('progress', JSON.stringify(arr));
-          } catch {}
-          return;
-        }
-      } catch {
-        // ignore
-      }
-      setProgress(readProgressLS());
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idNum]);
-
-  const isCompleted = progress.some((p) => p.lesson_id === idNum && p.status === 'completed');
-
-  // Отметить как пройдено (LS + БД, без повторного чтения из LS)
-  const markCompleted = async () => {
-    const uid = getClientUid();
-
-    let next: Progress[] = [];
-    setProgress((prev) => {
-      const exists = prev.find((p) => p.lesson_id === idNum);
-      next = exists
-        ? prev.map((p) => (p.lesson_id === idNum ? { ...p, status: 'completed' as const } : p))
-        : [...prev, { lesson_id: idNum, status: 'completed' as const }];
-
-      try {
-        localStorage.setItem('progress', JSON.stringify(next));
-      } catch {}
-      return next;
-    });
-
-    setSaving(true);
-    try {
-      await saveUserProgress(uid, next);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('save progress error', e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // соседние уроки
-  const prevId = idNum > 1 ? idNum - 1 : null;
-  const nextId = idNum < 6 ? idNum + 1 : null;
-
-  if (!meta) {
-    return (
-      <main className="mx-auto max-w-xl px-4 py-8">
-        <div className="glass rounded-xl p-6">Урок не найден</div>
-      </main>
-    );
-  }
+  const goBack = () => router.back();
+  const goHome = () => router.push('/');
+  const goNext = () => router.push(`/lesson/${id + 1}`);
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-5">
-      <PresenceClient page="lesson" lessonId={idNum} activity={`Урок #${idNum} | вкладка: ${tab}`} />
+    <main className="mx-auto w-full max-w-[720px] px-4 py-4">
+      {/* ====== верхняя панель ====== */}
+      <header className="relative mb-4">
+        {/* левая кнопка «назад» */}
+        <button
+          onClick={goBack}
+          className="absolute left-0 top-1.5 inline-flex items-center gap-2 text-[var(--fg)]/85 hover:text-[var(--fg)]"
+        >
+          <span className="text-lg">←</span>
+          <span className="text-sm">Назад</span>
+        </button>
 
-      <div className="mb-3 flex items-center justify-between">
-        <Link href="/" className="btn--outline">← Назад</Link>
-        <div className="text-xl font-extrabold">{meta.title}</div>
-        <Link href="/" className="text-sm text-[var(--muted)]">На главную</Link>
-      </div>
-
-      {/* Видео */}
-      <div className="glass rounded-xl p-6 text-center">
-        <div className="text-lg font-semibold">🎬 Видео-урок #{idNum}</div>
-        <div className="mt-2 text-sm text-[var(--muted)]">Здесь будет встроенный плеер (YouTube/Vimeo/файл)</div>
-      </div>
-
-      {/* Табы */}
-      <div className="mt-3 flex gap-2">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            className={`tab ${tab === t ? 'tab--active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t === 'desc' && '📝 Описание'}
-            {t === 'test' && '✅ Тест'}
-            {t === 'materials' && '📎 Материалы'}
-          </button>
-        ))}
-      </div>
-
-      {/* Контент вкладок */}
-      <div className="mt-3 glass rounded-xl p-4">
-        {tab === 'desc' && (
-          <div className="space-y-2">
-            <div className="text-sm text-[var(--muted)]">{meta.description || 'Описание урока'}</div>
-            <ul className="list-disc pl-5 text-sm">
-              <li>Главная идея урока</li>
-              <li>3–5 ключевых тезисов</li>
-              <li>Что сделать после просмотра</li>
-            </ul>
-          </div>
-        )}
-
-        {tab === 'test' && hasTest && (
-          <div className="space-y-2">
-            <div className="text-sm text-[var(--muted)]">Мини-тест (заглушка)</div>
-            <button className="btn-brand" onClick={markCompleted} disabled={saving || isCompleted}>
-              {isCompleted ? 'Пройдено' : saving ? 'Сохранение…' : 'Отметить как пройдено'}
-            </button>
-          </div>
-        )}
-
-        {tab === 'materials' && (
-          <div className="text-sm text-[var(--muted)]">Ссылки, чек-листы, PDF — добавим позже</div>
-        )}
-      </div>
-
-      {/* Нижняя панель — «красивые ячейки» */}
-      <div className="mt-4 glass rounded-xl p-3 flex items-center justify-between">
-        <Link href="/" className="btn--ghost">К списку уроков</Link>
-
-        <div className="flex gap-2">
-          {prevId && (
-            <Link className="btn--outline" href={`/lesson/${prevId}`}>
-              ← Предыдущий
-            </Link>
-          )}
-          {nextId && (
-            <Link className="btn" href={`/lesson/${nextId}`}>
-              Следующий →
-            </Link>
-          )}
+        {/* по центру — название урока */}
+        <div className="text-center">
+          <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight">
+            {title}
+          </h1>
         </div>
 
+        {/* справа — на главную */}
         <button
-          className={`btn ${isCompleted ? 'opacity-70 cursor-default' : ''}`}
-          onClick={markCompleted}
-          disabled={isCompleted || saving}
-          title={isCompleted ? 'Урок уже отмечен' : 'Отметить урок как пройденный'}
+          onClick={goHome}
+          className="absolute right-0 top-1.5 text-sm text-[var(--muted)] hover:text-[var(--fg)]"
         >
-          {isCompleted ? 'Пройдено' : saving ? 'Сохранение…' : 'Отметить пройдено'}
+          На главную
+        </button>
+      </header>
+
+      {/* ====== блок видео/контента ====== */}
+      <section className="glass rounded-[18px] p-4 mb-3">
+        <div className="flex items-center gap-2 text-[15px] font-semibold">
+          <span>🎬</span>
+          <span>Видео-урок #{id}</span>
+        </div>
+        <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)]">
+          Здесь будет встроенный плеер (YouTube / Vimeo / файл).
+        </p>
+
+        <div className="mt-3 aspect-video w-full rounded-[14px] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)] grid place-items-center text-[var(--muted)]">
+          Плеер (placeholder)
+        </div>
+      </section>
+
+      {/* ====== компактные табы ====== */}
+      <div
+        className="
+          mt-2 mb-3 inline-flex rounded-2xl border border-[var(--border)]
+          bg-[color-mix(in_oklab,var(--surface) 85%,transparent)] p-1 shadow-[0_6px_18px_rgba(0,0,0,.25)]
+        "
+      >
+        {[
+          { k: 'desc' as TabKey, label: 'Описание', icon: '📝' },
+          { k: 'test' as TabKey, label: 'Тест', icon: '✅' },
+          { k: 'materials' as TabKey, label: 'Материалы', icon: '📎' },
+        ].map((t) => {
+          const active = tab === t.k;
+          return (
+            <button
+              key={t.k}
+              onClick={() => setTab(t.k)}
+              className={[
+                'mx-0.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors',
+                active
+                  ? 'bg-[var(--brand)] text-black'
+                  : 'text-[var(--fg)]/85 hover:bg-[color-mix(in_oklab,var(--surface-2) 45%,transparent)]',
+              ].join(' ')}
+            >
+              <span className="mr-1">{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ====== контент табов ====== */}
+      {tab === 'desc' && (
+        <div className="glass rounded-[18px] p-4">
+          <p className="text-[14px] text-[var(--fg)]/90 mb-2">
+            Базовая терминология и что такое крипта.
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-[13px] text-[var(--muted)]">
+            <li>Главная идея урока</li>
+            <li>3–5 ключевых тезисов</li>
+            <li>Что сделать после просмотра</li>
+          </ul>
+        </div>
+      )}
+
+      {tab === 'test' && (
+        <div className="glass rounded-[18px] p-4">
+          <p className="text-[14px] text-[var(--fg)]/90">
+            Короткий тест по материалу: 3–5 вопросов с вариантами.
+          </p>
+          <p className="text-[12px] text-[var(--muted)] mt-1">Скоро 🔧</p>
+        </div>
+      )}
+
+      {tab === 'materials' && (
+        <div className="glass rounded-[18px] p-4">
+          <p className="text-[14px] text-[var(--fg)]/90 mb-2">
+            Материалы к уроку:
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-[13px] text-[var(--muted)]">
+            <li>Ссылки на биржи и статьи</li>
+            <li>Шпаргалка / PDF</li>
+            <li>Чек-лист действий</li>
+          </ul>
+        </div>
+      )}
+
+      {/* ====== блок действий (кнопки) ====== */}
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button
+          onClick={() => router.push('/')}
+          className="
+            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            border border-[var(--border)] bg-[var(--surface)]
+            shadow-[0_10px_26px_rgba(0,0,0,.25)]
+            hover:brightness-105 active:translate-y-[1px]
+            text-[15px] font-semibold
+          "
+        >
+          <span>📚</span>
+          <span>К списку уроков</span>
+        </button>
+
+        <button
+          onClick={goNext}
+          className="
+            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            bg-[var(--brand)] text-black
+            shadow-[0_10px_26px_rgba(0,0,0,.25)]
+            hover:brightness-105 active:translate-y-[1px]
+            text-[15px] font-extrabold
+          "
+        >
+          <span>➡️</span>
+          <span>Следующий</span>
+        </button>
+
+        <button
+          onClick={() => alert('Отметили как пройдено ✓')}
+          className="
+            inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3
+            border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)]
+            shadow-[0_10px_26px_rgba(0,0,0,.25)]
+            hover:brightness-105 active:translate-y-[1px]
+            text-[15px] font-semibold
+          "
+        >
+          <span>✅</span>
+          <span>Пройдено</span>
         </button>
       </div>
+
+      <div className="h-24" />
     </main>
   );
 }

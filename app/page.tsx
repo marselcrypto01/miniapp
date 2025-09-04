@@ -13,7 +13,7 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Совпадает с мини-баром */
+/** ширина = мини-бару через переменную */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
@@ -26,6 +26,7 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
+/* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
@@ -57,6 +58,7 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
+/* uid общий */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -70,6 +72,7 @@ function getClientUid(): string {
 
 export default function Home() {
   const router = useRouter();
+
   const [firstName, setFirstName] = useState<string | null>(null);
   const [env, setEnv] = useState<Env>('loading');
 
@@ -83,6 +86,7 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
+  /* вычисления */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
     () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
@@ -101,6 +105,7 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
+  /* TG / demo (имя) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -131,6 +136,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  /* уроки */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -164,6 +170,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
+  /* цитата */
   useEffect(() => {
     (async () => {
       try {
@@ -180,6 +187,7 @@ export default function Home() {
     })();
   }, []);
 
+  /* прогресс */
   useEffect(() => {
     const uid = getClientUid();
     (async () => {
@@ -212,16 +220,16 @@ export default function Home() {
     })();
   }, []);
 
+  /* авто-обновление при возврате */
   useEffect(() => {
-    const refresh = () => {
-      try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
-    };
+    const refresh = () => { try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {} };
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
     return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
+  /* сохраняем и считаем ачивки */
   useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
@@ -230,16 +238,17 @@ export default function Home() {
     if (_isCompleted(2)) next.unlock = true;
     if (_isCompleted(3)) next.fear = true;
     if (_isCompleted(4)) next.errors = true;
-    if (completedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
+    if (progress.filter(p=>p.status==='completed' && p.lesson_id<=CORE_LESSONS_COUNT).length === CORE_LESSONS_COUNT) next.arbitrager = true;
     setAchievements(next);
     try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
-    const finished = completedCount === CORE_LESSONS_COUNT;
+    const finished = progress.filter(p=>p.status==='completed' && p.lesson_id<=CORE_LESSONS_COUNT).length === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
     try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
     try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
     (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
-  }, [progress, progressLoaded, completedCount]);
+  }, [progress, progressLoaded]);
 
+  /* компактная «рамка» уровня */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
@@ -254,10 +263,8 @@ export default function Home() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        <div
-          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
-          style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
-        >
+        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
+             style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}>
           {children}
         </div>
       </div>
@@ -280,6 +287,7 @@ export default function Home() {
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
+      {/* Шапка */}
       <header className="mb-5 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
@@ -320,7 +328,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — 2×N, высота как у чипов, текст адаптивный до 2 строк */}
+        {/* Ачивки — толщина как у чипов (h-9), 2×N, текст до 2 строк + auto-shrink */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -333,12 +341,12 @@ export default function Home() {
             return (
               <div key={a.key} className="w-full">
                 <div
-                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-10 ${active ? '' : 'opacity-55'}`}
+                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-9 ${active ? '' : 'opacity-55'}`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
                   <span className="text-sm shrink-0">{a.icon}</span>
                   <span
-                    className="font-medium text-center leading-[1.15] break-words overflow-hidden
+                    className="font-medium text-center leading-[1.1] break-words overflow-hidden
                                [font-size:clamp(12px,3.1vw,14px)]"
                     style={{ display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical' }}
                   >
@@ -365,7 +373,10 @@ export default function Home() {
                   <div className="min-w-0 w-full">
                     <div className="text-[17px] font-semibold leading-tight break-words">Урок {idx + 1}. {l.title}</div>
                     <div className="text-[13px] text-[var(--muted)] mt-1">{mins} мин • Статус: {done ? 'пройден' : 'не начат'}</div>
-                    <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]" onClick={() => router.push(`/lesson/${l.id}`)}>Смотреть</button>
+                    <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                            onClick={() => router.push(`/lesson/${l.id}`)}>
+                      Смотреть
+                    </button>
                   </div>
                 </div>
               </div>
@@ -383,7 +394,12 @@ export default function Home() {
             <div className="w-full">
               <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
               <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
-              <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]" onClick={() => allCompleted && router.push('/lesson/6')} disabled={!allCompleted} title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}>
+              <button
+                className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                onClick={() => allCompleted && router.push('/lesson/6')}
+                disabled={!allCompleted}
+                title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}
+              >
                 {allCompleted ? 'Открыть' : 'Откроется после курса'}
               </button>
             </div>
@@ -391,7 +407,22 @@ export default function Home() {
         </div>
       </section>
 
-      <h2 className="mt-6 text-xl font-bold">FAQ</h2>
+      {/* FAQ вернул */}
+      <section className="w-full mt-6">
+        <h2 className="text-xl font-bold mb-2">FAQ</h2>
+        <div className="space-y-2">
+          {[
+            { q: 'Сколько времени займёт курс?', a: 'Всего 5 коротких уроков по 6–10 минут. Проходишь в удобном темпе.' },
+            { q: 'Нужен ли стартовый капитал?', a: 'Нет. Сначала разберём базу и ошибки новичков, затем безопасные первые шаги.' },
+            { q: 'Будет доступ к материалам после прохождения?', a: 'Да, материалы и чек-лист останутся у тебя.' },
+          ].map((f, i) => (
+            <details key={i} className="glass rounded-2xl p-3 w-full">
+              <summary className="cursor-pointer font-semibold">{f.q}</summary>
+              <p className="mt-2 text-sm text-[var(--muted)]">{f.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
     </main>

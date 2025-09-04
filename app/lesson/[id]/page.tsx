@@ -2,10 +2,12 @@
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { saveUserProgress } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
-type Tab = 'desc' | 'test' | 'materials';
+type Tab = 'desc' | 'test' | 'goodies';
+type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 
 const TITLES: Record<number, string> = {
   1: 'Крипта без сложных слов',
@@ -15,13 +17,56 @@ const TITLES: Record<number, string> = {
   5: 'Финал: твой первый шаг в мир крипты',
 };
 
+/* uid из главной */
+const UID_KEY = 'presence_uid';
+function getClientUid(): string {
+  try {
+    const from = localStorage.getItem(UID_KEY);
+    if (from) return from;
+    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(UID_KEY, gen);
+    return gen;
+  } catch { return 'anonymous'; }
+}
+
 export default function LessonPage() {
   const router = useRouter();
   const params = useParams();
   const id = Number(params?.id || 1);
 
   const [tab, setTab] = React.useState<Tab>('desc');
+  const [done, setDone] = React.useState<boolean>(false);
+
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
+
+  /* загрузить статус урока */
+  React.useEffect(() => {
+    try {
+      const raw = localStorage.getItem('progress');
+      if (!raw) return;
+      const arr = JSON.parse(raw) as Progress[];
+      const st = arr.find(p => p.lesson_id === id)?.status === 'completed';
+      setDone(!!st);
+    } catch {}
+  }, [id]);
+
+  /* сохранить статус урока */
+  const toggleDone = async () => {
+    try {
+      const raw = localStorage.getItem('progress');
+      let arr: Progress[] = [];
+      if (raw) arr = JSON.parse(raw) as Progress[];
+
+      const idx = arr.findIndex(p => p.lesson_id === id);
+      const status: 'completed' | 'pending' = done ? 'pending' : 'completed';
+      if (idx >= 0) arr[idx].status = status;
+      else arr.push({ lesson_id: id, status });
+
+      localStorage.setItem('progress', JSON.stringify(arr));
+      setDone(!done);
+      try { await saveUserProgress(getClientUid(), arr); } catch {}
+    } catch {}
+  };
 
   return (
     <main className={`${WRAP} py-4`}>
@@ -39,13 +84,13 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* Табы */}
+      {/* Табы: Описание / Тест / Полезное */}
       <div className="w-full mb-3">
         <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[var(--border)]">
           {[
             { key: 'desc' as const, label: 'Описание', icon: '📝' },
             { key: 'test' as const, label: 'Тест', icon: '✅' },
-            { key: 'materials' as const, label: 'Материалы', icon: '📎' },
+            { key: 'goodies' as const, label: 'Полезное', icon: '📎' },
           ].map((t, i) => {
             const active = tab === t.key;
             return (
@@ -81,40 +126,19 @@ export default function LessonPage() {
           Мини-квиз по уроку (заглушка).
         </section>
       )}
-      {tab === 'materials' && (
+      {tab === 'goodies' && (
         <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">
-          Дополнительные материалы и ссылки (заглушка).
+          Подборка полезных материалов и ссылок по теме урока.
         </section>
       )}
 
-      {/* Нижняя навигация (адаптивная grid) */}
-      <div
-        className="mt-4 w-full grid gap-2"
-        style={{ gridTemplateColumns: '1fr auto' }}
-      >
-        {/* На главную + Пройдено (1-я строка) */}
-        <button
-          onClick={() => router.push('/')}
-          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
-                     flex items-center justify-center gap-2 text-sm w-full"
-          title="На главную"
-        >
-          <span>🏠</span>
-          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">На главную</span>
-        </button>
-
-        <div className="px-3 h-11 rounded-xl border border-[var(--border)]
-                        bg-[color-mix(in_oklab,green_45%,var(--surface))] text-black font-semibold
-                        grid place-items-center text-sm whitespace-nowrap">
-          ✔ Пройдено
-        </div>
-
-        {/* Предыдущий / Следующий — во всю ширину (2-я строка) */}
+      {/* Нижняя навигация: 4 равные кнопки. На узких — 2×2, на широких — 1×4 */}
+      <div className="mt-4 w-full grid grid-cols-2 min-[420px]:grid-cols-4 gap-2">
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="col-span-2 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
-                     font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+          className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
+                     font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2 w-full"
           title="Предыдущий"
         >
           <span>←</span>
@@ -123,12 +147,36 @@ export default function LessonPage() {
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="col-span-2 h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm
-                     flex items-center justify-center gap-2"
+          className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm
+                     flex items-center justify-center gap-2 w-full"
           title="Следующий"
         >
           <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">Следующий</span>
           <span>→</span>
+        </button>
+
+        {/* На главную */}
+        <button
+          onClick={() => router.push('/')}
+          className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
+                     flex items-center justify-center gap-2 text-sm w-full"
+          title="На главную"
+        >
+          <span>🏠</span>
+          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">На главную</span>
+        </button>
+
+        {/* Пройдено — кликабельно, меняет цвет */}
+        <button
+          onClick={toggleDone}
+          className={`h-11 rounded-xl font-semibold text-sm w-full flex items-center justify-center gap-2 border
+            ${done
+              ? 'bg-[color-mix(in_oklab,green_45%,var(--surface))] text-black border-[var(--border)]'
+              : 'bg-[var(--surface)] text-[var(--fg)] border-[var(--border)]'}`}
+          title="Отметить как пройдено"
+        >
+          <span>{done ? '✅' : '☑️'}</span>
+          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">Пройдено</span>
         </button>
       </div>
 

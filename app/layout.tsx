@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import Script from 'next/script';
 import BottomNav from '../components/BottomNav';
+import BottomNavGuard from '@/components/BottomNavGuard';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -71,15 +72,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-[var(--bg)] text-[var(--fg)] antialiased`}
-        // Отступ под мини-бар + safe area
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }}
         suppressHydrationWarning
       >
-        {/* ВАЖНО: не оборачиваем в общий контейнер — страницы сами используют свой WRAP (max-w: var(--content-max)) */}
         {children}
-
-        {/* нижнее меню */}
-        <BottomNav />
+        <BottomNavGuard /> {/* вместо BottomNav */}
       </body>
     </html>
   );

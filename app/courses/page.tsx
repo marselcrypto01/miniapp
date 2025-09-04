@@ -28,7 +28,7 @@ export default function CoursesPage() {
   /* аккордеоны */
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
 
-  /* bottom sheet и модалка заявки */
+  /* bottom sheet и модалка заявки (sheet можно включить кнопкой, если нужна) */
   const [sheet, setSheet] = useState(false);
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
@@ -141,7 +141,7 @@ export default function CoursesPage() {
                 <div className="min-w-0">
                   <h3 className="text-[18px] font-semibold leading-tight">{f.title}</h3>
 
-                  {/* тизер — без …, но clamp до 2 строк */}
+                  {/* тизер — clamp до 2 строк */}
                   <p
                     className="mt-1 text-[14px] text-[var(--muted)] leading-snug overflow-hidden"
                     style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
@@ -149,8 +149,8 @@ export default function CoursesPage() {
                     {f.teaser}
                   </p>
 
-                  {/* чипы в одну строку со скроллом */}
-                  <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">
+                  {/* ЧИПЫ: всегда видны → перенос по строкам */}
+                  <div className="mt-2 flex gap-2 flex-wrap">
                     {f.chips.map((c, i) => <Chip key={i}>{c}</Chip>)}
                   </div>
 
@@ -185,10 +185,7 @@ export default function CoursesPage() {
                     <div className="font-semibold mb-1">Что внутри</div>
                     <ul className="list-disc pl-5 space-y-1 text-[14px]">
                       {f.bullets.map((b, i) => (
-                        <li key={i}>
-                          {/* подчёркиваем цифры жирным — простое эвристическое правило */}
-                          {b.replace(/(~?\d+ ?[%₽]|[0-9]+ ?дня|[0-9]+ ?нед(?:ели|\.))/g, (m) => `**${m}**`)}
-                        </li>
+                        <li key={i}>{b}</li>
                       ))}
                     </ul>
                   </div>
@@ -240,7 +237,7 @@ export default function CoursesPage() {
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
 
-      {/* ───────── bottom sheet «Сравнить форматы» ───────── */}
+      {/* bottom sheet (оставлен как в предыдущей версии; отображается, если setSheet(true)) */}
       {sheet && (
         <div className="fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSheet(false)} />
@@ -290,7 +287,7 @@ export default function CoursesPage() {
         </div>
       )}
 
-      {/* ───────── модалка «Оставить заявку» ───────── */}
+      {/* модалка «Оставить заявку» */}
       {formOpen && (
         <FormModal
           formatKey={formOpen}
@@ -300,7 +297,7 @@ export default function CoursesPage() {
           tgName={tgUser?.name || ''}
           tgUsername={tgUser?.username || ''}
           onSubmit={(payload) => {
-            // TODO: сюда подключи свой webhook/бота
+            // TODO: отправка в твоего бота/вебхук
             console.log('REQUEST:', payload);
             alert('Заявка отправлена ✨ Мы свяжемся в Telegram.');
             setFormOpen(null);

@@ -60,7 +60,6 @@ export default function AdminPage() {
           <div className="text-3xl">🔒</div>
           <h1 className="text-xl font-bold mt-1">Доступ запрещён</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">Только для <b>@marselv1</b>. {username ? <>Вы: <b>@{username}</b></> : null}</p>
-          <a href="/" className="btn mt-4">На главную</a>
         </div>
       </main>
     );

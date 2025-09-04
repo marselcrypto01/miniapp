@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { saveUserProgress } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
+const CORE_LESSONS_COUNT = 5; // <= ограничение «Следующий» не идёт дальше 5
 
 type Tab = 'desc' | 'test' | 'goodies';
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
@@ -17,7 +18,6 @@ const TITLES: Record<number, string> = {
   5: 'Финал: твой первый шаг в мир крипты',
 };
 
-/* uid из главной */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -39,7 +39,6 @@ export default function LessonPage() {
 
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
-  /* загрузить статус урока */
   React.useEffect(() => {
     try {
       const raw = localStorage.getItem('progress');
@@ -50,33 +49,29 @@ export default function LessonPage() {
     } catch {}
   }, [id]);
 
-  /* сохранить статус урока */
   const toggleDone = async () => {
     try {
       const raw = localStorage.getItem('progress');
-      let arr: Progress[] = [];
-      if (raw) arr = JSON.parse(raw) as Progress[];
-
+      let arr: Progress[] = raw ? JSON.parse(raw) : [];
       const idx = arr.findIndex(p => p.lesson_id === id);
       const status: 'completed' | 'pending' = done ? 'pending' : 'completed';
-      if (idx >= 0) arr[idx].status = status;
-      else arr.push({ lesson_id: id, status });
-
+      if (idx >= 0) arr[idx].status = status; else arr.push({ lesson_id: id, status });
       localStorage.setItem('progress', JSON.stringify(arr));
       setDone(!done);
       try { await saveUserProgress(getClientUid(), arr); } catch {}
     } catch {}
   };
 
+  const canGoPrev = id > 1;
+  const canGoNext = id < CORE_LESSONS_COUNT; // <- не даём уйти на 6-й
+
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Заголовок */}
       <header className="mb-3 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">{title}</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
       </header>
 
-      {/* Плеер */}
       <section className="glass p-4 rounded-2xl mb-3 w-full">
         <div className="text-[15px] font-semibold mb-3">🎬 Видео-урок #{id}</div>
         <div className="h-44 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--muted)] w-full">
@@ -110,7 +105,7 @@ export default function LessonPage() {
         </div>
       </div>
 
-      {/* Контент табов */}
+      {/* Контент табов (пример) */}
       {tab === 'desc' && (
         <section className="glass p-4 rounded-2xl w-full">
           <ul className="list-disc pl-5 space-y-2 text-[14px]">
@@ -132,11 +127,11 @@ export default function LessonPage() {
         </section>
       )}
 
-      {/* Нижняя навигация: 4 равные кнопки. На узких — 2×2, на широких — 1×4 */}
+      {/* Нижняя навигация: 4 одинаковые кнопки; «Следующий» заблокирован на 5-м */}
       <div className="mt-4 w-full grid grid-cols-2 min-[420px]:grid-cols-4 gap-2">
         <button
-          onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
-          disabled={id <= 1}
+          onClick={() => canGoPrev && router.push(`/lesson/${id - 1}`)}
+          disabled={!canGoPrev}
           className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
                      font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2 w-full"
           title="Предыдущий"
@@ -146,16 +141,17 @@ export default function LessonPage() {
         </button>
 
         <button
-          onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm
-                     flex items-center justify-center gap-2 w-full"
+          onClick={() => canGoNext && router.push(`/lesson/${id + 1}`)}
+          disabled={!canGoNext}
+          className="h-11 rounded-xl font-semibold text-sm w-full flex items-center justify-center gap-2
+                     disabled:opacity-50
+                     bg-[var(--brand)] text-black"
           title="Следующий"
         >
           <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">Следующий</span>
           <span>→</span>
         </button>
 
-        {/* На главную */}
         <button
           onClick={() => router.push('/')}
           className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
@@ -166,7 +162,6 @@ export default function LessonPage() {
           <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">На главную</span>
         </button>
 
-        {/* Пройдено — кликабельно, меняет цвет */}
         <button
           onClick={toggleDone}
           className={`h-11 rounded-xl font-semibold text-sm w-full flex items-center justify-center gap-2 border

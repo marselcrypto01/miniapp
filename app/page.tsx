@@ -19,8 +19,8 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** ВЕСЬ интерфейс тянем на ширину экрана, одинаковые поля (как мини-бар) */
-const WRAP = 'mx-auto w-full px-4';
+/** Ширина как у нижнего мини-бара: во всю ширину + одинаковые поля */
+const WRAP = 'w-full px-3'; // без max-w — тянем весь вьюпорт
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
@@ -115,7 +115,7 @@ export default function Home() {
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   /* Telegram / demo (берём имя) */
-  useEffect(() => {
+  React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
     let cancelled = false;
@@ -147,7 +147,7 @@ export default function Home() {
   }, []);
 
   /* уроки + переименование */
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -182,7 +182,7 @@ export default function Home() {
   }, []);
 
   /* цитата */
-  useEffect(() => {
+  React.useEffect(() => {
     (async () => {
       try {
         const q = await getRandomDailyQuote();
@@ -199,7 +199,7 @@ export default function Home() {
   }, []);
 
   /* прогресс */
-  useEffect(() => {
+  React.useEffect(() => {
     const uid = getClientUid();
     (async () => {
       try {
@@ -232,7 +232,7 @@ export default function Home() {
   }, []);
 
   /* обновлять прогресс при возврате */
-  useEffect(() => {
+  React.useEffect(() => {
     const refresh = () => {
       try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
     };
@@ -243,9 +243,10 @@ export default function Home() {
   }, []);
 
   /* сохранение + ачивки */
-  useEffect(() => {
+  React.useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
+    const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
     if (isCompleted(1)) next.first = true;
     if (isCompleted(2)) next.unlock = true;
     if (isCompleted(3)) next.fear = true;
@@ -340,8 +341,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки: сетка во всю ширину */}
-        <div className="mt-3 grid grid-cols-2 gap-2 w-full">
+        {/* Ачивки: ТЕПЕРЬ авто-ширины под текст */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
             { key: 'unlock' as const, icon: '🔓', label: 'Разблокировал знания' },
@@ -351,11 +352,13 @@ export default function Home() {
           ].map(a => {
             const active = achievements[a.key];
             return (
-              <div key={a.key}
-                   className={`px-3 py-2 rounded-full border flex items-center justify-center gap-1 text-[12px] w-full ${active ? '' : 'opacity-55'}`}
-                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
-                <span className="text-[14px]">{a.icon}</span>
-                <span className="font-medium text-center">{a.label}</span>
+              <div
+                key={a.key}
+                className={`inline-flex px-3 py-2 rounded-full border items-center justify-center gap-1 text-[12px] max-w-full ${active ? '' : 'opacity-55'}`}
+                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+              >
+                <span className="text-[14px] shrink-0">{a.icon}</span>
+                <span className="font-medium text-center whitespace-nowrap">{a.label}</span>
               </div>
             );
           })}
@@ -403,7 +406,6 @@ export default function Home() {
       </section>
 
       <h2 className="mt-6 text-xl font-bold">FAQ</h2>
-      {/* ...оставил прежние вопросы/ответы... */}
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
     </main>

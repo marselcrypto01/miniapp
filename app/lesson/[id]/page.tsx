@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** ширина как на главной — во весь экран с полями */
-const WRAP = 'mx-auto w-full px-4';
+/** Ширина как у главной/мини-бара */
+const WRAP = 'w-full px-3';
 
 export default function LessonPage() {
   const router = useRouter();
@@ -13,18 +13,18 @@ export default function LessonPage() {
 
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Навигация сверху — по краям контейнера */}
+      {/* Верхняя навигация */}
       <div className="flex items-center justify-between gap-2 mb-3 w-full">
-        <button onClick={() => router.back()} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm">
+        <button onClick={() => router.back()} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
           <span>←</span><span className="font-semibold">Назад</span>
         </button>
-        <div className="text-sm font-extrabold opacity-80">Урок {id}</div>
-        <button onClick={() => router.push('/')} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm">
+        <div className="text-sm font-extrabold opacity-80 text-center grow">Урок {id}</div>
+        <button onClick={() => router.push('/')} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
           <span>🏠</span><span className="font-semibold">На главную</span>
         </button>
       </div>
 
-      {/* Плеер — тянется на всю ширину контейнера */}
+      {/* Плеер */}
       <section className="glass p-4 rounded-2xl mb-3 w-full">
         <div className="text-[15px] font-semibold mb-3">🎬 Видео-урок #{id}</div>
         <div className="h-44 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--muted)] w-full">
@@ -32,7 +32,7 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* Табы — три равных, компактнее */}
+      {/* Табы */}
       <div className="grid grid-cols-3 gap-2 mb-3 w-full">
         <button className="h-9 rounded-xl border border-[var(--border)] bg-[var(--brand)] text-black font-semibold text-sm flex items-center justify-center gap-1.5">
           <span>📝</span><span>Описание</span>
@@ -55,11 +55,11 @@ export default function LessonPage() {
         </ul>
       </section>
 
-      {/* Нижняя навигация — всё в один ряд, компактнее */}
-      <div className="mt-4 grid grid-cols-[auto_1fr_1fr_auto] gap-2 w-full">
+      {/* Нижняя навигация — всегда помещается */}
+      <div className="mt-4 grid grid-cols-2 gap-2 min-[360px]:grid-cols-[auto_1fr_1fr_auto] w-full">
         <button
           onClick={() => router.push('/')}
-          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2 text-sm"
+          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2 text-sm justify-center"
           title="К списку уроков"
         >
           <span>📚</span><span className="font-semibold">К списку</span>
@@ -68,14 +68,14 @@ export default function LessonPage() {
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50"
+          className="h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 min-w-0"
         >
           ← Предыдущий
         </button>
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm"
+          className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm min-w-0"
         >
           Следующий →
         </button>

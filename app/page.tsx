@@ -88,29 +88,39 @@ export default function Home() {
 
   /* страховочный редирект в /admin — если стартовали по ?startapp=admin и это @marselv1 */
   useEffect(() => {
-    let stopped = false;
-    const params = new URLSearchParams(window.location.search);
-    const askedAdminParam = params.get('startapp')?.toLowerCase?.();
+  let stop = false;
 
-    (async () => {
-      for (let i = 0; i < 60 && !stopped; i++) {
-        try {
-          // @ts-ignore
-          const wa = (window as any)?.Telegram?.WebApp;
-          const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
-          const startParm = wa?.initDataUnsafe?.start_param?.toLowerCase?.();
-          const asked     = (askedAdminParam === 'admin') || (startParm === 'admin');
-          if (username === 'marselv1' && asked) {
-            router.replace('/admin');
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
-      }
-    })();
+  function wantAdmin() {
+    const sp = new URLSearchParams(window.location.search);
+    const s1 = (sp.get('startapp') || '').toLowerCase();
+    const s2 = (sp.get('tgWebAppStartParam') || '').toLowerCase();
+    let s3 = '';
+    if (location.hash.startsWith('#')) {
+      try { s3 = new URLSearchParams(location.hash.slice(1)).get('tgWebAppStartParam') || ''; } catch {}
+    }
+    return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
+  }
 
-    return () => { stopped = true; };
-  }, [router]);
+  (async () => {
+    for (let i = 0; i < 80 && !stop; i++) {
+      try {
+        // @ts-ignore
+        const wa = (window as any)?.Telegram?.WebApp;
+        const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
+        const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
+        const asked     = wantAdmin() || startParm === 'admin';
+        if (username === 'marselv1' && asked) {
+          // используем location.replace, чтобы сработало до гидрации роутера в вебвью
+          window.location.replace('/admin');
+          return;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, 100));
+    }
+  })();
+
+  return () => { stop = true; };
+}, []);
 
   /* вычисления */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';

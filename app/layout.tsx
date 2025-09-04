@@ -27,33 +27,42 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="admin-redirect" strategy="afterInteractive">{`
           (function () {
             try {
-              var params = new URLSearchParams(location.search);
-              var askedAdminParam = params.get('startapp');
-              var tries = 0;
+              function getStartFlag() {
+                // search: ?startapp=admin или ?tgWebAppStartParam=admin
+                var sp  = new URLSearchParams(location.search);
+                var a1  = (sp.get('startapp') || '').toLowerCase();
+                var a2  = (sp.get('tgWebAppStartParam') || '').toLowerCase();
 
-              function go() {
+                // иногда Телега кладёт в hash: #tgWebAppStartParam=admin
+                var hash = location.hash || '';
+                var h = '';
+                if (hash.startsWith('#')) {
+                  try { h = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch (e) {}
+                }
+
+                return (a1 === 'admin') || (a2 === 'admin') || (h && h.toLowerCase() === 'admin');
+              }
+
+              var tries = 0;
+              function tick() {
                 try {
                   var wa = window.Telegram && window.Telegram.WebApp;
-                  if (wa && typeof wa.ready === 'function') {
-                    try { wa.ready(); } catch (e) {}
-                  }
+                  if (wa && typeof wa.ready === 'function') { try { wa.ready(); } catch(e){} }
 
-                  var username = wa && wa.initDataUnsafe && wa.initDataUnsafe.user && wa.initDataUnsafe.user.username;
-                  var startParam = wa && wa.initDataUnsafe && wa.initDataUnsafe.start_param;
+                  var username   = wa && wa.initDataUnsafe && wa.initDataUnsafe.user && wa.initDataUnsafe.user.username;
+                  var startParam = wa && wa.initDataUnsafe && (wa.initDataUnsafe.start_param || wa.initDataUnsafe.startapp);
+                  var startOk    = getStartFlag() || (typeof startParam === 'string' && startParam.toLowerCase() === 'admin');
+                  var isAdmin    = username && username.toLowerCase && username.toLowerCase() === 'marselv1';
 
-                  var isAdminUser = username && username.toLowerCase && username.toLowerCase() === 'marselv1';
-                  var askedAdmin = (askedAdminParam && askedAdminParam.toLowerCase() === 'admin') ||
-                                  (startParam && startParam.toLowerCase() === 'admin');
-
-                  if (isAdminUser && askedAdmin && location.pathname !== '/admin') {
+                  if (isAdmin && startOk && location.pathname !== '/admin') {
                     location.replace('/admin');
                     return;
                   }
                 } catch (e) {}
-                // пробуем подольше: до ~6 секунд
-                if (++tries < 60) setTimeout(go, 100);
+
+                if (++tries < 80) setTimeout(tick, 100); // до ~8с ждём initData
               }
-              go();
+              tick();
             } catch (e) {}
           })();
         `}</Script>

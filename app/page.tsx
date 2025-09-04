@@ -13,38 +13,8 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Синхронизация ширины с нижним баром (точно по его inner-контейнеру) */
-function useAlignWithBottomBar() {
-  useEffect(() => {
-    const sel = '[data-mainbar-inner]';
-    const apply = () => {
-      const inner = document.querySelector<HTMLElement>(sel);
-      if (!inner) {
-        document.documentElement.style.setProperty('--edge-x', '16px');
-        return;
-      }
-      const r = inner.getBoundingClientRect(); // включает padding
-      const left = Math.max(0, Math.round(r.left));
-      const right = Math.max(0, Math.round(window.innerWidth - r.right));
-      // берем левый отступ, чтобы совпадали видимые края
-      const gutter = left; 
-      document.documentElement.style.setProperty('--edge-x', `${gutter}px`);
-    };
-    apply();
-    const onResize = () => apply();
-    window.addEventListener('resize', onResize);
-    const ro = new ResizeObserver(apply);
-    const el = document.querySelector<HTMLElement>(sel);
-    if (el) ro.observe(el);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      ro.disconnect();
-    };
-  }, []);
-}
-
-/** Контент растягиваем на весь вьюпорт, а боковые поля ставим как у бара */
-const WRAP = 'w-screen px-[var(--edge-x,16px)]';
+/** ТОЧНО как у BottomNav: mx-auto max-w-xl px-4 */
+const WRAP = 'mx-auto max-w-xl px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 const QUOTES = [
@@ -86,6 +56,7 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
+/* uid общий */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -101,7 +72,6 @@ function getClientUid(): string {
 
 export default function Home() {
   const router = useRouter();
-  useAlignWithBottomBar();
 
   const [firstName, setFirstName] = useState<string | null>(null);
   const [env, setEnv] = useState<Env>('loading');
@@ -138,6 +108,7 @@ export default function Home() {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
     let cancelled = false;
+
     const detect = async () => {
       for (let i = 0; i < 10; i++) {
         const wa = (window as any)?.Telegram?.WebApp;
@@ -173,6 +144,7 @@ export default function Home() {
         const mapped: Lesson[] = rows
           .sort((a: any, b: any) => (a.order_index ?? a.id) - (b.order_index ?? b.id))
           .map((r: any) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
+
         const names: Record<number, string> = {
           1: 'Крипта без сложных слов: что это и зачем тебе',
           2: 'Арбитраж: простой способ зарабатывать на обмене крипты',
@@ -347,7 +319,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — всегда 2 в ряд */}
+        {/* Ачивки: 2 в ряд */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -393,6 +365,7 @@ export default function Home() {
           })}
         </div>
 
+        {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
         <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
 

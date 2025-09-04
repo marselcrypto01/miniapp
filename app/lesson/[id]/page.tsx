@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** Та же авто-ширина по краям, что у главной */
-const WRAP = 'w-screen px-[var(--edge-x,16px)]';
+/** ТОЧНО как у BottomNav */
+const WRAP = 'mx-auto max-w-xl px-4';
 
 export default function LessonPage() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export default function LessonPage() {
 
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Верх */}
+      {/* Верхняя навигация */}
       <div className="flex items-center justify-between gap-2 mb-3 w-full">
         <button onClick={() => router.back()} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
           <span>←</span><span className="font-semibold">Назад</span>

@@ -3,8 +3,8 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** Ширина как у главной/мини-бара */
-const WRAP = 'w-full px-3';
+/** Тот же контейнер, что у нижнего бара */
+const WRAP = 'mx-auto max-w-xl px-4';
 
 export default function LessonPage() {
   const router = useRouter();
@@ -55,33 +55,38 @@ export default function LessonPage() {
         </ul>
       </section>
 
-      {/* Нижняя навигация — всегда помещается */}
-      <div className="mt-4 grid grid-cols-2 gap-2 min-[360px]:grid-cols-[auto_1fr_1fr_auto] w-full">
+      {/* Нижняя навигация — стрелки */}
+      <div className="mt-4 grid grid-cols-[auto_1fr_1fr_auto] gap-2 w-full">
         <button
           onClick={() => router.push('/')}
-          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2 text-sm justify-center"
+          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] grid place-items-center text-sm"
           title="К списку уроков"
         >
-          <span>📚</span><span className="font-semibold">К списку</span>
+          📚
         </button>
 
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 min-w-0"
+          className="h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 grid place-items-center"
+          title="Предыдущий"
         >
-          ← Предыдущий
+          ←
         </button>
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm min-w-0"
+          className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm grid place-items-center"
+          title="Следующий"
         >
-          Следующий →
+          →
         </button>
 
-        <div className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm">
-          ✔ Пройдено
+        <div
+          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm"
+          title="Отметить пройдено"
+        >
+          ✔
         </div>
       </div>
 

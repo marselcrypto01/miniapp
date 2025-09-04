@@ -15,7 +15,8 @@
 
   --brand:#d4aa7d;
   --brand-200:#efd09e;
-
+  
+  --edge-x:16px; /* запасной отступ по X, если бар не найден */
   --radius-sm:12px;
   --radius:18px;
   --radius-lg:22px;

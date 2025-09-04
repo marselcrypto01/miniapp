@@ -19,8 +19,8 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Ширина как у нижнего мини-бара: во всю ширину + одинаковые поля */
-const WRAP = 'w-full px-3'; // без max-w — тянем весь вьюпорт
+/** ВАЖНО: тот же контейнер, что и у нижнего бара */
+const WRAP = 'mx-auto max-w-xl px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
@@ -115,7 +115,7 @@ export default function Home() {
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   /* Telegram / demo (берём имя) */
-  React.useEffect(() => {
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
     let cancelled = false;
@@ -147,7 +147,7 @@ export default function Home() {
   }, []);
 
   /* уроки + переименование */
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -182,7 +182,7 @@ export default function Home() {
   }, []);
 
   /* цитата */
-  React.useEffect(() => {
+  useEffect(() => {
     (async () => {
       try {
         const q = await getRandomDailyQuote();
@@ -199,7 +199,7 @@ export default function Home() {
   }, []);
 
   /* прогресс */
-  React.useEffect(() => {
+  useEffect(() => {
     const uid = getClientUid();
     (async () => {
       try {
@@ -232,7 +232,7 @@ export default function Home() {
   }, []);
 
   /* обновлять прогресс при возврате */
-  React.useEffect(() => {
+  useEffect(() => {
     const refresh = () => {
       try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
     };
@@ -243,7 +243,7 @@ export default function Home() {
   }, []);
 
   /* сохранение + ачивки */
-  React.useEffect(() => {
+  useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
     const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
@@ -341,7 +341,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки: ТЕПЕРЬ авто-ширины под текст */}
+        {/* Ачивки — авто-ширина под текст */}
         <div className="mt-3 flex flex-wrap items-center gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },

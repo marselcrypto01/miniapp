@@ -3,7 +3,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
-import EdgeSync from '@/components/EdgeSync';
 import {
   listLessons,
   getRandomDailyQuote,
@@ -20,12 +19,10 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Обёртка, которая синхронизирует края с нижним баром через CSS-переменные */
-const WRAP = 'page-wrap';
+/** ТОЧНО как у BottomNav: mx-auto max-w-xl px-4 */
+const WRAP = 'mx-auto max-w-xl px-4';
 
-const ICONS: Record<number, string> = {
-  1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚'
-};
+const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
 const QUOTES = [
   'Учись видеть возможности там, где другие видят шум.',
@@ -93,7 +90,7 @@ export default function Home() {
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
-    first: false, unlock: false, fear: false, errors: false, arbitrager: false
+    first: false, unlock: false, fear: false, errors: false, arbitrager: false,
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
@@ -108,6 +105,9 @@ export default function Home() {
   const points = completedCount * POINTS_PER_LESSON;
 
   const xp = computeXP(completedCount, achievements);
+  theLevel: {
+    /* keep variable names tidy */
+  }
   const { key: levelKey, progressPct } = computeLevel(xp);
   const level = LEVELS[levelKey];
 
@@ -115,7 +115,7 @@ export default function Home() {
     () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
     []
   );
-  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
+  const coreLessons = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   /* Telegram / demo (берём имя) */
   useEffect(() => {
@@ -167,7 +167,7 @@ export default function Home() {
           4: '5 ошибок новичков, которые убивают заработок',
           5: 'Финал: твой первый шаг в мир крипты',
         };
-        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
+        const patched = mapped.map(m => (names[m.id] ? { ...m, title: names[m.id] } : m));
         setLessons(patched);
         try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
       } catch {
@@ -298,7 +298,6 @@ export default function Home() {
   if (env === 'browser') {
     return (
       <main className={`flex h-screen items-center justify-center ${WRAP}`}>
-        <EdgeSync />
         <div className="glass p-6 text-center w-full">
           <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
@@ -310,73 +309,47 @@ export default function Home() {
   /* разметка */
   return (
     <main className={`${WRAP} py-4`}>
-      <EdgeSync />
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
       {/* Шапка */}
       <header className="mb-5 w-full">
-        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">
-          Курс по заработку на крипте
-        </h1>
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
-        <p className="mt-3 text-[13px] text-[var(--muted)]">
-          Привет{firstName ? `, ${firstName}` : ''}!
-        </p>
+        <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"
-          style={{
-            boxShadow: 'var(--shadow)',
-            borderLeftWidth: '4px',
-            borderLeftColor: 'var(--brand)',
-            background:
-              'color-mix(in oklab, var(--surface-2) 85%, transparent)',
-          }}
+          style={{ boxShadow: 'var(--shadow)', borderLeftWidth: '4px', borderLeftColor: 'var(--brand)', background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)' }}
         >
-          <span className="mr-1">“</span>
-          {quote}
-          <span className="ml-1">”</span>
+          <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
         {/* очки + уровень */}
         <div className="mt-4 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-4 py-2 w-full justify-center">
-              <span>🏆</span>
-              <span className="text-sm font-semibold">{points} очк.</span>
+              <span>🏆</span><span className="text-sm font-semibold">{points} очк.</span>
             </div>
           </div>
-          <ChipRing pct={progressPct}>
-            <span>{level.icon}</span>
-            <span className="text-sm font-semibold">{level.title}</span>
-          </ChipRing>
+          <ChipRing pct={progressPct}><span>{level.icon}</span><span className="text-sm font-semibold">{level.title}</span></ChipRing>
         </div>
 
         {/* прогресс-бар */}
         <div className="mt-3 w-full">
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden w-full">
-            <div
-              className="absolute inset-y-0 left-0 bg-[var(--brand)]"
-              style={{ width: `${coursePct}%` }}
-            />
+            <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
             {checkpoints.map((p, i) => (
-              <div
-                key={i}
-                className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]"
-                style={{ left: `calc(${p}% - 4px)` }}
-              />
+              <div key={i} className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]" style={{ left: `calc(${p}% - 4px)` }} />
             ))}
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-            <span>
-              Пройдено: {completedCount}/{CORE_LESSONS_COUNT}
-            </span>
+            <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
             <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
           </div>
         </div>
 
-        {/* Ачивки: 2 в ряд, ширина под текст */}
+        {/* Ачивки: 2 в ряд, у каждой своя ширина по тексту */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -384,16 +357,13 @@ export default function Home() {
             { key: 'fear' as const, icon: '🛡️', label: 'Победил страхи' },
             { key: 'errors' as const, icon: '✅', label: 'Ошибки повержены' },
             { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
-          ].map((a) => {
+          ].map(a => {
             const active = achievements[a.key];
             return (
               <div key={a.key} className="flex">
                 <div
                   className={`inline-flex px-3 py-2 rounded-full border items-center gap-1 text-[12px] ${active ? '' : 'opacity-55'}`}
-                  style={{
-                    borderColor: 'var(--border)',
-                    background: 'var(--surface-2)',
-                  }}
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
                   <span className="text-[14px]">{a.icon}</span>
                   <span className="font-medium whitespace-nowrap">{a.label}</span>
@@ -410,29 +380,15 @@ export default function Home() {
         <div className="space-y-3 w-full">
           {coreLessons.map((l, idx) => {
             const done = isCompleted(l.id);
-            const mins = ({ 1: 7, 2: 9, 3: 8, 4: 6, 5: 10 } as Record<number, number>)[l.id] ?? 6;
+            const mins = ({1:7,2:9,3:8,4:6,5:10} as Record<number, number>)[l.id] ?? 6;
             return (
-              <div
-                key={l.id}
-                className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]"
-              >
+              <div key={l.id} className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]">
                 <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
-                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
-                    {ICONS[l.id] ?? '📘'}
-                  </div>
+                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">{ICONS[l.id] ?? '📘'}</div>
                   <div className="min-w-0 w-full">
-                    <div className="text-[17px] font-semibold leading-tight break-words">
-                      Урок {idx + 1}. {l.title}
-                    </div>
-                    <div className="text-[13px] text-[var(--muted)] mt-1">
-                      {mins} мин • Статус: {done ? 'пройден' : 'не начат'}
-                    </div>
-                    <button
-                      className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                      onClick={() => router.push(`/lesson/${l.id}`)}
-                    >
-                      Смотреть
-                    </button>
+                    <div className="text-[17px] font-semibold leading-tight break-words">Урок {idx + 1}. {l.title}</div>
+                    <div className="text-[13px] text-[var(--muted)] mt-1">{mins} мин • Статус: {done ? 'пройден' : 'не начат'}</div>
+                    <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]" onClick={() => router.push(`/lesson/${l.id}`)}>Смотреть</button>
                   </div>
                 </div>
               </div>
@@ -442,32 +398,15 @@ export default function Home() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">
-          Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)
-        </p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
-            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
-              📚
-            </div>
+            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">📚</div>
             <div className="w-full">
-              <div className="text-[17px] font-semibold leading-tight">
-                Дополнительные материалы
-              </div>
-              <div className="text-[12px] text-[var(--muted)] mt-1">
-                Секретный чек-лист банков и бирж
-              </div>
-              <button
-                className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                onClick={() => allCompleted && router.push('/lesson/6')}
-                disabled={!allCompleted}
-                title={
-                  allCompleted
-                    ? 'Открыть бонус'
-                    : 'Откроется после прохождения всех уроков'
-                }
-              >
+              <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
+              <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
+              <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]" onClick={() => allCompleted && router.push('/lesson/6')} disabled={!allCompleted} title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}>
                 {allCompleted ? 'Открыть' : 'Откроется после курса'}
               </button>
             </div>

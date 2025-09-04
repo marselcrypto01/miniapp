@@ -6,7 +6,7 @@ import PresenceClient from '@/components/PresenceClient';
 import { listLessons, getRandomDailyQuote, getUserProgress, saveUserProgress } from '@/lib/db';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
-type Lesson = { id: number; title: string; subtitle?: string | null };
+type Lesson   = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
 type Env = 'loading' | 'telegram' | 'browser';
 
@@ -29,11 +29,11 @@ const QUOTES = [
 /* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
-  novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
-  megagood: { title: 'Мегахорош', threshold: 40, icon: '💪' },
-  almostpro: { title: 'ПочтиПрофи', threshold: 80, icon: '⚡' },
-  arbitrager: { title: 'Арбитражник', threshold: 120, icon: '🎯' },
-  cryptoboss: { title: 'Крипто-босс', threshold: 160, icon: '👑' },
+  novice:      { title: 'Новичок',      threshold: 0,   icon: '🌱' },
+  megagood:    { title: 'Мегахорош',    threshold: 40,  icon: '💪' },
+  almostpro:   { title: 'ПочтиПрофи',   threshold: 80,  icon: '⚡' },
+  arbitrager:  { title: 'Арбитражник',  threshold: 120, icon: '🎯' },
+  cryptoboss:  { title: 'Крипто-босс',  threshold: 160, icon: '👑' },
 };
 
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
@@ -53,8 +53,8 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   const next = order[idx + 1];
   if (!next) return { key: current, nextAt: null, progressPct: 100 };
   const from = LEVELS[current].threshold;
-  const to = LEVELS[next].threshold;
-  const pct = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
+  const to   = LEVELS[next].threshold;
+  const pct  = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
   return { key: current, nextAt: to, progressPct: pct };
 }
 
@@ -86,6 +86,32 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
+  /* страховочный редирект в /admin — если стартовали по ?startapp=admin и это @marselv1 */
+  useEffect(() => {
+    let stopped = false;
+    const params = new URLSearchParams(window.location.search);
+    const askedAdminParam = params.get('startapp')?.toLowerCase?.();
+
+    (async () => {
+      for (let i = 0; i < 60 && !stopped; i++) {
+        try {
+          // @ts-ignore
+          const wa = (window as any)?.Telegram?.WebApp;
+          const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
+          const startParm = wa?.initDataUnsafe?.start_param?.toLowerCase?.();
+          const asked     = (askedAdminParam === 'admin') || (startParm === 'admin');
+          if (username === 'marselv1' && asked) {
+            router.replace('/admin');
+            return;
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 100));
+      }
+    })();
+
+    return () => { stopped = true; };
+  }, [router]);
+
   /* вычисления */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
@@ -93,7 +119,7 @@ export default function Home() {
     [progress]
   );
   const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
-  const points = completedCount * POINTS_PER_LESSON;
+  const points    = completedCount * POINTS_PER_LESSON;
 
   const xp = computeXP(completedCount, achievements);
   const { key: levelKey, progressPct } = computeLevel(xp);
@@ -238,15 +264,19 @@ export default function Home() {
     if (_isCompleted(2)) next.unlock = true;
     if (_isCompleted(3)) next.fear = true;
     if (_isCompleted(4)) next.errors = true;
-    if (progress.filter(p=>p.status==='completed' && p.lesson_id<=CORE_LESSONS_COUNT).length === CORE_LESSONS_COUNT) next.arbitrager = true;
+    const finishedCount = progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
+    if (finishedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
+
     setAchievements(next);
     try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
-    const finished = progress.filter(p=>p.status==='completed' && p.lesson_id<=CORE_LESSONS_COUNT).length === CORE_LESSONS_COUNT;
+
+    const finished = finishedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
     try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
+
     try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
     (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
-  }, [progress, progressLoaded]);
+  }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* компактная «рамка» уровня */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
@@ -263,8 +293,10 @@ export default function Home() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
-             style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}>
+        <div
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
+          style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
+        >
           {children}
         </div>
       </div>
@@ -373,8 +405,10 @@ export default function Home() {
                   <div className="min-w-0 w-full">
                     <div className="text-[17px] font-semibold leading-tight break-words">Урок {idx + 1}. {l.title}</div>
                     <div className="text-[13px] text-[var(--muted)] mt-1">{mins} мин • Статус: {done ? 'пройден' : 'не начат'}</div>
-                    <button className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                            onClick={() => router.push(`/lesson/${l.id}`)}>
+                    <button
+                      className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                      onClick={() => router.push(`/lesson/${l.id}`)}
+                    >
                       Смотреть
                     </button>
                   </div>
@@ -407,130 +441,66 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ — обновлённый контент */}
+      {/* FAQ */}
       <section className="w-full mt-6">
         <h2 className="text-xl font-bold mb-3">📌 FAQ</h2>
 
         <div className="space-y-2">
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              1. А если у меня всего 10–20 тысяч — это вообще имеет смысл?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Да. Даже с минимальной суммой можно увидеть результат. Рекомендую начинать от 20 тысяч рублей — это
-              комфортный старт, при котором уже будет ощутимый доход. Главное — понять механику, а дальше всё масштабируется.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              2. Не поздно ли заходить в крипту в 2025 году?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Нет. Крипторынок продолжает расти, миллионы людей подключаются каждый год. Арбитраж работает, пока есть
-              разница курсов и люди меняют валюту — а это всегда.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              3. Правда, что можно уйти в минус и потерять все деньги?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Уйти в минус невозможно. Все сделки проходят через официальные биржи с эскроу: вы покупаете дешевле и
-              продаёте дороже. Риск только в банальной невнимательности — например, ошибиться в номере карты при
-              переводе. Поэтому при аккуратности рисков нет.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              4. Сколько реально можно заработать в месяц новичку?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Новички обычно делают 50–80 тыс. рублей при капитале 50–100 тыс. рублей. Доходность в арбитраже может быть
-              от 7% к капиталу в день, если правильно подходить. Всё зависит от дисциплины и вовлечённости.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              5. Что если банк начнёт задавать вопросы?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Для этого есть готовые сценарии ответов и лимиты по суммам. Банки не запрещают арбитраж, главное — не гнать
-              миллионы через одну карту. Соблюдая простые правила, проблем не будет.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              6. Я работаю/учусь. Сколько времени нужно тратить на арбитраж?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Достаточно 1–2 часов в день. Этого хватает, чтобы делать сделки и зарабатывать. Арбитраж легко совмещать с
-              работой или учёбой.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              7. А вдруг я не разберусь? Это не слишком сложно?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Всё подаётся пошагово. Есть калькулятор, чек-листы и инструкции. Даже полный новичок быстро включается:
-              сначала немного непривычно, но потом процесс становится простым и понятным.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              8. Чем арбитраж лучше инвестиций в монеты или трейдинга?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 В трейдинге и инвестициях доход зависит от угадываний и долгосрочных колебаний. В арбитраже доход системный:
-              купил дешевле — продал дороже. Ты зарабатываешь сразу, а не ждёшь месяцами.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              9. Нужно ли показывать доход налоговой или бояться блокировок?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Налогового регулирования для P2P-арбитража нет. Мы ничем противозаконным не занимаемся. На старте суммы
-              небольшие, банки к ним не придираются.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              10. А если у меня нет подходящей карты/банка?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Есть подборка лучших банков и платёжных систем — ты получишь её в бонусных материалах после прохождения
-              курса.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              11. А если курс закроют или крипту запретят?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Запретить обмен полностью невозможно. Даже если один банк ужесточит правила, есть десятки других вариантов
-              и международные платформы.
-            </p>
-          </details>
-
-          <details className="glass rounded-2xl p-3 w-full">
-            <summary className="cursor-pointer font-semibold">
-              12. Нужно ли сидеть за компьютером весь день?
-            </summary>
-            <p className="mt-2 text-sm text-[var(--muted)]">
-              👉 Нет. Все сделки удобно делать с телефона — буквально несколько кликов, и сделка завершена.
-            </p>
-          </details>
+          {[
+            [
+              '1. А если у меня всего 10–20 тысяч — это вообще имеет смысл?',
+              '👉 Да. Даже с минимальной суммой можно увидеть результат. Рекомендую начинать от 20 тысяч рублей — это комфортный старт, при котором уже будет ощутимый доход. Главное — понять механику, а дальше всё масштабируется.',
+            ],
+            [
+              '2. Не поздно ли заходить в крипту в 2025 году?',
+              '👉 Нет. Крипторынок продолжает расти, миллионы людей подключаются каждый год. Арбитраж работает, пока есть разница курсов и люди меняют валюту — а это всегда.',
+            ],
+            [
+              '3. Правда, что можно уйти в минус и потерять все деньги?',
+              '👉 Уйти в минус невозможно. Все сделки проходят через официальные биржи с эскроу: вы покупаете дешевле и продаёте дороже. Риск только в банальной невнимательности — например, ошибиться в номере карты при переводе. Поэтому при аккуратности рисков нет.',
+            ],
+            [
+              '4. Сколько реально можно заработать в месяц новичку?',
+              '👉 Новички обычно делают 50–80 тыс. рублей при капитале 50–100 тыс. рублей. Доходность в арбитраже может быть от 7% к капиталу в день, если правильно подходить. Всё зависит от дисциплины и вовлечённости.',
+            ],
+            [
+              '5. Что если банк начнёт задавать вопросы?',
+              '👉 Для этого есть готовые сценарии ответов и лимиты по суммам. Банки не запрещают арбитраж, главное — не гнать миллионы через одну карту. Соблюдая простые правила, проблем не будет.',
+            ],
+            [
+              '6. Я работаю/учусь. Сколько времени нужно тратить на арбитраж?',
+              '👉 Достаточно 1–2 часов в день. Этого хватает, чтобы делать сделки и зарабатывать. Арбитраж легко совмещать с работой или учёбой.',
+            ],
+            [
+              '7. А вдруг я не разберусь? Это не слишком сложно?',
+              '👉 Всё подаётся пошагово. Есть калькулятор, чек-листы и инструкции. Даже полный новичок быстро включается: сначала немного непривычно, но потом процесс становится простым и понятным.',
+            ],
+            [
+              '8. Чем арбитраж лучше инвестиций в монеты или трейдинга?',
+              '👉 В трейдинге и инвестициях доход зависит от угадываний и долгосрочных колебаний. В арбитраже доход системный: купил дешевле — продал дороже. Ты зарабатываешь сразу, а не ждёшь месяцами.',
+            ],
+            [
+              '9. Нужно ли показывать доход налоговой или бояться блокировок?',
+              '👉 Налогового регулирования для P2P-арбитража нет. Мы ничем противозаконным не занимаемся. На старте суммы небольшие, банки к ним не придираются.',
+            ],
+            [
+              '10. А если у меня нет подходящей карты/банка?',
+              '👉 Есть подборка лучших банков и платёжных систем — ты получишь её в бонусных материалах после прохождения курса.',
+            ],
+            [
+              '11. А если курс закроют или крипту запретят?',
+              '👉 Запретить обмен полностью невозможно. Даже если один банк ужесточит правила, есть десятки других вариантов и международные платформы.',
+            ],
+            [
+              '12. Нужно ли сидеть за компьютером весь день?',
+              '👉 Нет. Все сделки удобно делать с телефона — буквально несколько кликов, и сделка завершена.',
+            ],
+          ].map(([q, a], i) => (
+            <details key={i} className="glass rounded-2xl p-3 w-full">
+              <summary className="cursor-pointer font-semibold">{q}</summary>
+              <p className="mt-2 text-sm text-[var(--muted)]">{a}</p>
+            </details>
+          ))}
         </div>
       </section>
 

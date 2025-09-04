@@ -22,6 +22,9 @@
   --container-w:1100px;
 }
 
+html, body { height: 100%; overflow-x: hidden; }
+main { overflow-x: hidden; }
+
 /* ───────── База ───────── */
 html,body{height:100%;overflow-x:hidden;} /* выключаем горизонтальный скролл везде */
 html{color-scheme:dark;}

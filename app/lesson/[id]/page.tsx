@@ -1,105 +1,97 @@
 'use client';
 
 import React from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
+
+// общий контейнер — ровно как на главной/мини-баре
+const WRAP = 'mx-auto w-full max-w-[384px] px-4';
 
 export default function LessonPage() {
   const router = useRouter();
-  const { id } = useParams<{ id: string }>();
-  const n = Number(id || 1);
-
-  const goPrev = () => n > 1 && router.push(`/lesson/${n - 1}`);
-  const goNext = () => router.push(`/lesson/${n + 1}`);
-  const goList = () => router.push('/');
+  const params = useParams();
+  const id = Number(params?.id || 1);
 
   return (
-    <main className="mx-auto w-full max-w-[430px] px-4 py-4">
-      {/* верхняя навигация — кнопки по краям, заголовок по центру */}
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <main className={`${WRAP} py-4`}>
+      {/* Навигация сверху: настоящие кнопки */}
+      <div className="flex items-center justify-between gap-2 mb-3">
         <button
           onClick={() => router.back()}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-[var(--border)]"
-          style={{ background: 'var(--surface)', color: 'var(--fg)' }}
+          className="px-3 h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2"
         >
-          <span>←</span> <span className="text-sm font-semibold">Назад</span>
+          <span>←</span><span className="font-semibold">Назад</span>
         </button>
-
-        <div className="text-[17px] sm:text-lg font-bold text-center flex-1">
-          Урок {n}
-        </div>
-
+        <div className="text-sm font-extrabold opacity-80">Урок {id}</div>
         <button
           onClick={() => router.push('/')}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border border-[var(--border)]"
-          style={{ background: 'var(--surface)', color: 'var(--fg)' }}
+          className="px-3 h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2"
         >
-          <span>🏠</span> <span className="text-sm font-semibold">На главную</span>
+          <span>🏠</span><span className="font-semibold">На главную</span>
         </button>
       </div>
 
-      {/* карточка с видео */}
-      <div className="rounded-2xl border border-[var(--border)] p-4 mb-3" style={{ background: 'var(--surface)' }}>
-        <div className="font-semibold">🎬 Видео-урок #{n}</div>
-        <div className="mt-3 h-40 rounded-xl grid place-items-center border border-[var(--border)]"
-             style={{ background: 'var(--surface-2)', color: 'var(--muted)' }}>
+      {/* Карточка с плеером */}
+      <section className="glass p-4 rounded-2xl mb-3">
+        <div className="text-[15px] font-semibold mb-3">🎬 Видео-урок #{id}</div>
+        <div className="h-40 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--muted)]">
           Плеер (placeholder)
         </div>
+      </section>
+
+      {/* Табы 3×равные, с маленькими эмодзи */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <button className="h-10 rounded-xl border border-[var(--border)] bg-[var(--brand)] text-black font-semibold flex items-center justify-center gap-2">
+          <span>📝</span><span>Описание</span>
+        </button>
+        <button className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] font-semibold flex items-center justify-center gap-2">
+          <span>✅</span><span>Тест</span>
+        </button>
+        <button className="h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] font-semibold flex items-center justify-center gap-2">
+          <span>📎</span><span>Материалы</span>
+        </button>
       </div>
 
-      {/* Табы: 3 кнопки = 1/3 ширины */}
-      <div className="mb-3 grid grid-cols-3 gap-2">
-        <button className="h-10 rounded-xl font-semibold text-sm"
-                style={{ background: 'var(--brand)', color: '#1c1c1c' }}>📄 Описание</button>
-        <button className="h-10 rounded-xl font-semibold text-sm border border-[var(--border)]"
-                style={{ background: 'var(--surface)', color: 'var(--fg)' }}>✅ Тест</button>
-        <button className="h-10 rounded-xl font-semibold text-sm border border-[var(--border)]"
-                style={{ background: 'var(--surface)', color: 'var(--fg)' }}>📎 Материалы</button>
-      </div>
-
-      {/* Контент «Описание» */}
-      <div className="rounded-2xl border border-[var(--border)] p-4" style={{ background: 'var(--surface)' }}>
-        <ul className="list-disc pl-5 space-y-2 text-sm">
+      {/* Контент таба «Описание» */}
+      <section className="glass p-4 rounded-2xl">
+        <ul className="list-disc pl-5 space-y-2 text-[14px]">
           <li>Базовая терминология и что такое крипта.</li>
           <li>Главная идея урока.</li>
           <li>3–5 ключевых тезисов.</li>
           <li>Что сделать после просмотра.</li>
         </ul>
-      </div>
+      </section>
 
-      {/* Нижняя панель навигации — всё в один ряд */}
-      <div className="mt-4 flex items-center gap-2">
+      {/* Нижняя навигация: 3+1 в один ряд */}
+      <div className="mt-4 grid grid-cols-[auto_1fr_1fr_auto] gap-2">
         <button
-          onClick={goList}
-          className="h-10 px-3 rounded-xl inline-flex items-center gap-2 text-sm border border-[var(--border)]"
-          style={{ background: 'var(--surface)', color: 'var(--fg)' }}
+          onClick={() => router.push('/')}
+          className="px-3 h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2"
+          title="К списку уроков"
         >
-          📚 К списку
+          <span>📚</span><span className="font-semibold text-sm">К списку</span>
         </button>
 
         <button
-          onClick={goPrev}
-          disabled={n <= 1}
-          className="h-10 px-3 rounded-xl inline-flex items-center gap-2 text-sm border border-[var(--border)] disabled:opacity-50"
-          style={{ background: 'var(--surface)', color: 'var(--fg)' }}
+          onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
+          disabled={id <= 1}
+          className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold disabled:opacity-50"
         >
           ← Предыдущий
         </button>
 
         <button
-          onClick={goNext}
-          className="h-10 px-3 rounded-xl inline-flex items-center gap-2 text-sm font-semibold"
-          style={{ background: 'var(--brand)', color: '#1c1c1c' }}
+          onClick={() => router.push(`/lesson/${id + 1}`)}
+          className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold"
         >
           Следующий →
         </button>
 
-        <span
-          className="ml-auto h-10 px-3 rounded-xl inline-flex items-center gap-2 text-sm font-semibold border border-[var(--border)]"
-          style={{ background: 'color-mix(in oklab,#3cc25b 25%, var(--surface))', color: '#d7ffe1' }}
-        >
+        <div className="px-3 h-11 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center">
           ✔ Пройдено
-        </span>
+        </div>
       </div>
+
+      <div className="pb-24" />
     </main>
   );
 }

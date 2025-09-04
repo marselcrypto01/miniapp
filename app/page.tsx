@@ -10,6 +10,7 @@ import {
   saveUserProgress,
 } from '@/lib/db';
 
+/* ───────────────── types / const ───────────────── */
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
@@ -17,6 +18,9 @@ type Env = 'loading' | 'telegram' | 'browser';
 
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
+
+// общий контейнер (та же ширина, что и нижний мини-бар)
+const WRAP = 'mx-auto w-full max-w-[384px] px-4';
 
 const ICONS: Record<number, string> = {
   1: '🧠',
@@ -35,6 +39,7 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
+/* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice:     { title: 'Новичок',     threshold: 0,   icon: '🌱' },
@@ -80,10 +85,11 @@ function getClientUid(): string {
   }
 }
 
+/* ───────────────── component ───────────────── */
 export default function Home() {
   const router = useRouter();
 
-  // имя (first_name), а не username
+  // приветствуем по имени
   const [firstName, setFirstName] = useState<string | null>(null);
   const [env, setEnv] = useState<Env>('loading');
 
@@ -92,24 +98,17 @@ export default function Home() {
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
-    first: false,
-    unlock: false,
-    fear: false,
-    errors: false,
-    arbitrager: false,
+    first: false, unlock: false, fear: false, errors: false, arbitrager: false
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* ===== вычисления ===== */
-  const isCompleted = (id: number) =>
-    progress.find((p) => p.lesson_id === id)?.status === 'completed';
-
+  /* вычисления */
+  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
-    () => progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
     [progress]
   );
-
   const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
   const points = completedCount * POINTS_PER_LESSON;
 
@@ -121,11 +120,10 @@ export default function Home() {
     () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
     []
   );
-
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
   const bonusLessons = useMemo(() => lessons.filter(l => l.id >  CORE_LESSONS_COUNT), [lessons]);
 
-  /* ===== Telegram / демо-режим (берём имя) ===== */
+  /* Telegram / demo (берём имя) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -136,32 +134,28 @@ export default function Home() {
         const wa = (window as any)?.Telegram?.WebApp;
         if (wa) {
           try {
-            wa.ready();
-            wa.expand?.();
+            wa.ready(); wa.expand?.();
             const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
             if (!cancelled) {
               if (hasInit || demo) {
                 setEnv('telegram');
                 const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
                 setFirstName(name);
-              } else {
-                setEnv('browser');
-              }
+              } else setEnv('browser');
             }
             return;
           } catch {}
         }
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 100));
       }
       if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
       if (demo) setFirstName('Друг');
     };
-
     void detect();
     return () => { cancelled = true; };
   }, []);
 
-  /* ===== уроки ===== */
+  /* уроки + переименование */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -180,7 +174,6 @@ export default function Home() {
           5: 'Финал: твой первый шаг в мир крипты',
         };
         const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
-
         setLessons(patched);
         try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
       } catch {
@@ -197,7 +190,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* ===== цитата ===== */
+  /* цитата */
   useEffect(() => {
     (async () => {
       try {
@@ -214,24 +207,7 @@ export default function Home() {
     })();
   }, []);
 
-  /* ===== обновлять прогресс при возврате ===== */
-  useEffect(() => {
-    const refresh = () => {
-      try {
-        const raw = localStorage.getItem('progress');
-        if (raw) setProgress(JSON.parse(raw));
-      } catch {}
-    };
-    window.addEventListener('focus', refresh);
-    const onVis = () => document.visibilityState === 'visible' && refresh();
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, []);
-
-  /* ===== прогресс: БД → LS ===== */
+  /* прогресс */
   useEffect(() => {
     const uid = getClientUid();
     (async () => {
@@ -264,34 +240,39 @@ export default function Home() {
     })();
   }, []);
 
-  /* ===== сохранить прогресс + ачивки ===== */
+  /* обновлять прогресс при возврате */
+  useEffect(() => {
+    const refresh = () => {
+      try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
+    };
+    window.addEventListener('focus', refresh);
+    const onVis = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+
+  /* сохранение + ачивки */
   useEffect(() => {
     if (!progressLoaded) return;
-
     const next = { ...achievements };
     if (isCompleted(1)) next.first = true;
     if (isCompleted(2)) next.unlock = true;
     if (isCompleted(3)) next.fear = true;
     if (isCompleted(4)) next.errors = true;
     if (completedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
-
     setAchievements(next);
     try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
 
     const finished = completedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
     try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
-
     try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
-
     (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* ===== чип уровня ===== */
-  const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({
-    pct, children, className,
-  }) => {
+  /* чип уровня */
+  const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({ pct, children, className }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
       <div
@@ -305,23 +286,20 @@ export default function Home() {
           boxShadow: 'var(--shadow)',
         }}
       >
-        <div
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-full"
-          style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
-        >
+        <div className="flex items-center justify-center gap-2 px-4 py-2 rounded-full"
+             style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}>
           {children}
         </div>
       </div>
     );
   };
 
-  /* ===== гейт ===== */
+  /* гейт */
   if (env === 'loading') return null;
-
   if (env === 'browser') {
     return (
-      <main className="flex h-screen items-center justify-center px-4 overflow-x-hidden">
-        <div className="glass p-6 text-center">
+      <main className={`flex h-screen items-center justify-center ${WRAP}`}>
+        <div className="glass p-6 text-center w-full">
           <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
           <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
         </div>
@@ -329,35 +307,30 @@ export default function Home() {
     );
   }
 
-  /* ===== разметка ===== */
+  /* разметка */
   return (
-    <main className="mx-auto w-full max-w-[430px] px-4 py-4 overflow-x-hidden">
+    <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
-      {/* ======= ШАПКА ======= */}
-      <header className="mb-5 w-full">
-        <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight leading-[1.1]">
-          Курс по заработку на крипте
-        </h1>
+      {/* Шапка */}
+      <header className="mb-5">
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
-        <p className="mt-3 text-[13px] sm:text-sm text-[var(--muted)]">
-          Привет{firstName ? `, ${firstName}` : ''}!
-        </p>
+        <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
 
         <blockquote
-          className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] sm:text-sm italic text-[var(--muted)]"
+          className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)]"
           style={{
             boxShadow: 'var(--shadow)',
-            borderLeftWidth: '4px',
-            borderLeftColor: 'var(--brand)',
+            borderLeftWidth: '4px', borderLeftColor: 'var(--brand)',
             background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)',
           }}
         >
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень — во всю ширину, одинаковая с минибаром */}
+        {/* очки + уровень */}
         <div className="mt-4 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-4 py-2 w-full justify-center">
@@ -371,17 +344,13 @@ export default function Home() {
           </ChipRing>
         </div>
 
-        {/* статус-бар */}
-        <div className="mt-3 w-full">
+        {/* прогресс-бар */}
+        <div className="mt-3">
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden">
             <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
             {checkpoints.map((p, i) => (
-              <div
-                key={i}
-                className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]"
-                style={{ left: `calc(${p}% - 4px)` }}
-                title={`Урок ${i + 1}`}
-              />
+              <div key={i} className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]"
+                   style={{ left: `calc(${p}% - 4px)` }} />
             ))}
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
@@ -390,8 +359,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ачивки — компактная сетка, под размер текста, перенос 2–3 строки */}
-        <div className="mt-3 grid grid-flow-row auto-rows-min grid-cols-2 gap-2 w-full">
+        {/* Ачивки: сетка 2-в-ряд, авто-перенос */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
           {[
             { key: 'first' as const,      icon: '👣', label: 'Первый шаг' },
             { key: 'unlock' as const,     icon: '🔓', label: 'Разблокировал знания' },
@@ -401,53 +370,39 @@ export default function Home() {
           ].map(a => {
             const active = achievements[a.key];
             return (
-              <div
-                key={a.key}
-                className={`inline-flex items-center justify-center gap-2 px-2.5 py-1 rounded-full border text-[12px] ${active ? '' : 'opacity-55'}`}
-                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
-                title={a.label}
-              >
+              <div key={a.key}
+                   className={`px-3 py-2 rounded-full border flex items-center justify-center gap-1 text-[12px] ${active ? '' : 'opacity-55'}`}
+                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}>
                 <span className="text-[14px]">{a.icon}</span>
-                <span className="font-medium leading-none text-center">{a.label}</span>
+                <span className="font-medium text-center">{a.label}</span>
               </div>
             );
           })}
         </div>
       </header>
 
-      {/* ===== Уроки ===== */}
-      <section className="w-full">
-        <h2 className="text-xl sm:text-2xl font-bold mb-2">Уроки</h2>
-
+      {/* Уроки */}
+      <section>
+        <h2 className="text-xl font-bold mb-2">Уроки</h2>
         <div className="space-y-3">
           {coreLessons.map((l, idx) => {
             const done = isCompleted(l.id);
             const mins = ({1:7,2:9,3:8,4:6,5:10} as Record<number, number>)[l.id] ?? 6;
             return (
-              <div
-                key={l.id}
-                className="
-                  grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
-                  shadow-[0_1px_12px_rgba(0,0,0,.12)]
-                  grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr_auto]
-                "
-              >
+              <div key={l.id}
+                   className="grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)] grid-cols-[48px_1fr]">
                 <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
                   {ICONS[l.id] ?? '📘'}
                 </div>
-
                 <div className="min-w-0">
-                  <div className="text-[17px] sm:text-[18px] font-semibold leading-tight break-words">
+                  <div className="text-[17px] font-semibold leading-tight break-words">
                     Урок {idx + 1}. {l.title}
                   </div>
                   <div className="text-[13px] text-[var(--muted)] mt-1">
                     {mins} мин • Статус: {done ? 'пройден' : 'не начат'}
                   </div>
-                </div>
-
-                <div className="col-span-2 sm:col-span-1 sm:self-center">
                   <button
-                    className="w-full sm:w-auto px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                    className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
                     onClick={() => router.push(`/lesson/${l.id}`)}
                   >
                     Смотреть
@@ -464,22 +419,13 @@ export default function Home() {
           Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)
         </p>
 
-        <div
-          className="
-            grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]
-            grid-cols-[48px_1fr] sm:grid-cols-[56px_1fr_auto]
-          "
-        >
-          <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
-            📚
-          </div>
+        <div className="grid gap-3 p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] grid-cols-[48px_1fr]">
+          <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">📚</div>
           <div>
             <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
             <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
-          </div>
-          <div className="col-span-2 sm:col-span-1 sm:self-center">
             <button
-              className="w-full sm:w-auto px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+              className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
               onClick={() => allCompleted && router.push('/lesson/6')}
               disabled={!allCompleted}
               title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}
@@ -490,7 +436,8 @@ export default function Home() {
         </div>
       </section>
 
-      <h2 className="mt-6 text-xl sm:text-2xl font-bold">FAQ</h2>
+      {/* FAQ оставил без изменений */}
+      <h2 className="mt-6 text-xl font-bold">FAQ</h2>
       <div className="mt-3 space-y-2">
         {[
           { q: 'А если у меня всего 10–20 тысяч — это вообще имеет смысл?', a: '👉 Да. Даже с минимальной суммой можно увидеть результат. Рекомендую начинать от 20 тысяч рублей — это комфортный старт, при котором уже будет ощутимый доход. Главное — понять механику, а дальше всё масштабируется.' },
@@ -508,7 +455,7 @@ export default function Home() {
         ].map((f, i) => (
           <details key={i} className="glass rounded-[14px] p-3">
             <summary className="cursor-pointer font-semibold text-[15px] leading-tight">{f.q}</summary>
-            <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)] leading-snug whitespace-pre-wrap">{f.a}</p>
+            <p className="mt-2 text-[13px] text-[var(--muted)] leading-snug whitespace-pre-wrap">{f.a}</p>
           </details>
         ))}
       </div>

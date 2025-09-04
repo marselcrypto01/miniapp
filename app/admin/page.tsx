@@ -7,36 +7,85 @@ import PresenceClient, {
   type PresenceSession as PresenceSessionType,
 } from '@/components/PresenceClient';
 
+/* ───────────────── auth gate ───────────────── */
+
+function useIsAdmin(): { loading: boolean; allowed: boolean; username?: string } {
+  const [state, setState] = useState<{ loading: boolean; allowed: boolean; username?: string }>({
+    loading: true,
+    allowed: false,
+    username: undefined,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = async () => {
+      try {
+        // ждём появления Telegram.WebApp (до ~1 сек)
+        for (let i = 0; i < 10; i++) {
+          // @ts-ignore
+          const wa = (window as any)?.Telegram?.WebApp;
+          if (wa) {
+            const u = wa?.initDataUnsafe?.user;
+            const username: string | undefined = u?.username;
+            const demo = new URLSearchParams(window.location.search).get('demoAdmin') === '1';
+            const allowed = (username && username.toLowerCase() === 'marselv1') || demo;
+            if (!cancelled) setState({ loading: false, allowed, username });
+            return;
+          }
+          await new Promise(r => setTimeout(r, 100));
+        }
+      } catch {}
+      if (!cancelled) setState({ loading: false, allowed: false, username: undefined });
+    };
+
+    void check();
+    return () => { cancelled = true; };
+  }, []);
+
+  return state;
+}
+
 /* =========================== Admin shell =========================== */
 
 export default function AdminPage() {
-  // вкладки открываются без каких-либо проверок
+  const { loading, allowed, username } = useIsAdmin();
   const [tab, setTab] = useState<'lessons' | 'users' | 'settings'>('lessons');
+
+  // пока проверяем телеграм — ничего не рендерим, чтобы не мигало
+  if (loading) return null;
+
+  if (!allowed) {
+    return (
+      <main className="mx-auto max-w-[var(--content-max)] px-4 py-10">
+        <PresenceClient page="admin" activity="Админ-панель (доступ запрещён)" />
+        <div className="glass rounded-2xl p-6 text-center">
+          <div className="text-3xl mb-2">🔒</div>
+          <h1 className="text-xl font-bold">Доступ запрещён</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Эта страница доступна только администратору <b>@marselv1</b>.
+            {username ? <> Вы вошли как <b>@{username}</b>.</> : null}
+          </p>
+          <a href="/" className="btn mt-4">На главную</a>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6">
-      {/* фиксируем, что мы в админке */}
       <PresenceClient page="admin" activity="Админ-панель" />
 
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-3xl font-extrabold tracking-tight">Админ-панель</h1>
         <div className="tabs">
-          <button
-            className={`tab ${tab === 'lessons' ? 'tab--active' : ''}`}
-            onClick={() => setTab('lessons')}
-          >
+          <button className={`tab ${tab === 'lessons' ? 'tab--active' : ''}`} onClick={() => setTab('lessons')}>
             📚 Уроки
           </button>
-          <button
-            className={`tab ${tab === 'users' ? 'tab--active' : ''}`}
-            onClick={() => setTab('users')}
-          >
+          <button className={`tab ${tab === 'users' ? 'tab--active' : ''}`} onClick={() => setTab('users')}>
             👥 Пользователи
           </button>
-          <button
-            className={`tab ${tab === 'settings' ? 'tab--active' : ''}`}
-            onClick={() => setTab('settings')}
-          >
+          <button className={`tab ${tab === 'settings' ? 'tab--active' : ''}`} onClick={() => setTab('settings')}>
             ⚙️ Настройки
           </button>
         </div>
@@ -47,7 +96,7 @@ export default function AdminPage() {
       {tab === 'settings' && <SettingsEditor />}
 
       <p className="mt-8 pb-8 text-center text-xs text-[var(--muted)]">
-        demo admin • localStorage prototype
+        admin • localStorage prototype
       </p>
     </main>
   );
@@ -55,12 +104,7 @@ export default function AdminPage() {
 
 /* ========================= Уроки — редактор ========================= */
 
-type LessonEditable = {
-  id: number;
-  title: string;
-  subtitle?: string;
-  description?: string;
-};
+type LessonEditable = { id: number; title: string; subtitle?: string; description?: string; };
 
 function LessonsEditor() {
   const [items, setItems] = useState<LessonEditable[]>([]);
@@ -72,8 +116,8 @@ function LessonsEditor() {
         const arr = JSON.parse(saved) as unknown;
         if (Array.isArray(arr)) {
           setItems(
-            arr
-              .map((l: any): LessonEditable | null => {
+            (arr as any[])
+              .map((l) => {
                 const id = Number(l?.id);
                 if (!Number.isFinite(id)) return null;
                 return {
@@ -81,29 +125,21 @@ function LessonsEditor() {
                   title: String(l?.title ?? ''),
                   subtitle: String(l?.subtitle ?? ''),
                   description: String(l?.description ?? ''),
-                };
+                } as LessonEditable;
               })
               .filter(Boolean) as LessonEditable[]
           );
-        } else {
-          seedFromDefaults();
-        }
-      } else {
-        seedFromDefaults();
-      }
-    } catch {
-      seedFromDefaults();
-    }
+        } else seedFromDefaults();
+      } else seedFromDefaults();
+    } catch { seedFromDefaults(); }
 
     function seedFromDefaults() {
-      const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map(
-        (l: LessonMeta): LessonEditable => ({
-          id: l.id,
-          title: l.title,
-          subtitle: l.subtitle || '',
-          description: l.description || '',
-        })
-      );
+      const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map((l) => ({
+        id: l.id,
+        title: l.title,
+        subtitle: l.subtitle || '',
+        description: l.description || '',
+      }));
       setItems(seed);
     }
   }, []);
@@ -112,23 +148,15 @@ function LessonsEditor() {
     setItems((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
 
   const save = () => {
-    try {
-      localStorage.setItem('admin_lessons', JSON.stringify(items));
-      alert('✅ Уроки сохранены (localStorage). Позже заменим на БД.');
-    } catch {}
+    try { localStorage.setItem('admin_lessons', JSON.stringify(items)); alert('✅ Уроки сохранены'); } catch {}
   };
 
   const reset = () => {
     try {
       localStorage.removeItem('admin_lessons');
-      const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map(
-        (l: LessonMeta): LessonEditable => ({
-          id: l.id,
-          title: l.title,
-          subtitle: l.subtitle || '',
-          description: l.description || '',
-        })
-      );
+      const seed: LessonEditable[] = (LESSONS as LessonMeta[]).map((l) => ({
+        id: l.id, title: l.title, subtitle: l.subtitle || '', description: l.description || '',
+      }));
       setItems(seed);
       alert('♻️ Сброшено к дефолтам');
     } catch {}
@@ -137,12 +165,8 @@ function LessonsEditor() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <button className="btn--outline" onClick={save}>
-          💾 Сохранить
-        </button>
-        <button className="btn" onClick={reset}>
-          ♻️ Сбросить
-        </button>
+        <button className="btn--outline" onClick={save}>💾 Сохранить</button>
+        <button className="btn" onClick={reset}>♻️ Сбросить</button>
       </div>
 
       <div className="grid gap-4">
@@ -157,9 +181,7 @@ function LessonsEditor() {
               onChange={(e) => patch(l.id, { title: e.target.value })}
             />
 
-            <label className="mt-3 block text-sm font-semibold">
-              Подзаголовок
-            </label>
+            <label className="mt-3 block text-sm font-semibold">Подзаголовок</label>
             <input
               className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
               value={l.subtitle || ''}
@@ -174,9 +196,7 @@ function LessonsEditor() {
               onChange={(e) => patch(l.id, { description: e.target.value })}
             />
 
-            <div className="mt-3 text-right text-xs text-[var(--muted)]">
-              Сохраняется через «💾 Сохранить»
-            </div>
+            <div className="mt-3 text-right text-xs text-[var(--muted)]">Сохраняется через «💾 Сохранить»</div>
           </div>
         ))}
       </div>
@@ -189,7 +209,6 @@ function LessonsEditor() {
 function UsersLive() {
   const [sessions, setSessions] = useState<PresenceSessionType[]>([]);
 
-  // обновляем список каждые 5 сек (демо)
   useEffect(() => {
     const load = () => setSessions(readPresenceStore());
     load();
@@ -237,8 +256,7 @@ function UsersLive() {
               {sessions.length === 0 && (
                 <tr>
                   <td className="px-2 py-2 text-[var(--muted)]" colSpan={8}>
-                    Пусто. Откройте приложение в соседней вкладке, чтобы
-                    появился пользователь.
+                    Пусто. Откройте приложение в соседней вкладке, чтобы появился пользователь.
                   </td>
                 </tr>
               )}
@@ -249,13 +267,9 @@ function UsersLive() {
                   <td className="px-2 py-2">{s.page}</td>
                   <td className="px-2 py-2">{s.activity ?? '—'}</td>
                   <td className="px-2 py-2">{s.lessonId ?? '—'}</td>
-                  <td className="px-2 py-2">
-                    {s.progressPct !== undefined ? `${s.progressPct}%` : '—'}
-                  </td>
+                  <td className="px-2 py-2">{s.progressPct !== undefined ? `${s.progressPct}%` : '—'}</td>
                   <td className="px-2 py-2">{s.isOnline ? '🟢' : '⚪️'}</td>
-                  <td className="px-2 py-2">
-                    {new Date(s.updatedAt).toLocaleTimeString()}
-                  </td>
+                  <td className="px-2 py-2">{new Date(s.updatedAt).toLocaleTimeString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -263,9 +277,8 @@ function UsersLive() {
         </div>
 
         <div className="mt-3 text-xs text-[var(--muted)]">
-          * Прототип: данные пишет каждый клиент в свой{' '}
-          <code>localStorage</code>. Для настоящей аналитики заменим на БД +
-          вебсокеты.
+          * Прототип: данные пишет каждый клиент в свой <code>localStorage</code>.
+          Для продакшна заменить на БД + вебсокеты.
         </div>
       </div>
     </div>
@@ -291,31 +304,21 @@ function SettingsEditor() {
           'Дорогу осилит идущий. Шаг за шагом.',
         ]);
       }
-    } catch {
-      setQuotes([]);
-    }
+    } catch { setQuotes([]); }
   }, []);
 
   const add = () => setQuotes((q) => [...q, 'Новая цитата…']);
-  const patch = (i: number, val: string) =>
-    setQuotes((q) => q.map((x, idx) => (i === idx ? val : x)));
+  const patch = (i: number, val: string) => setQuotes((q) => q.map((x, idx) => (i === idx ? val : x)));
   const del = (i: number) => setQuotes((q) => q.filter((_, idx) => i !== idx));
   const save = () => {
-    try {
-      localStorage.setItem('admin_quotes', JSON.stringify(quotes));
-      alert('✅ Цитаты сохранены (localStorage)');
-    } catch {}
+    try { localStorage.setItem('admin_quotes', JSON.stringify(quotes)); alert('✅ Цитаты сохранены'); } catch {}
   };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <button className="btn--outline" onClick={save}>
-          💾 Сохранить
-        </button>
-        <button className="btn" onClick={add}>
-          ➕ Добавить
-        </button>
+        <button className="btn--outline" onClick={save}>💾 Сохранить</button>
+        <button className="btn" onClick={add}>➕ Добавить</button>
       </div>
 
       <div className="grid gap-3">
@@ -328,9 +331,7 @@ function SettingsEditor() {
                 value={q}
                 onChange={(e) => patch(i, e.target.value)}
               />
-              <button className="btn" onClick={() => del(i)}>
-                🗑️
-              </button>
+              <button className="btn" onClick={() => del(i)}>🗑️</button>
             </div>
           </div>
         ))}

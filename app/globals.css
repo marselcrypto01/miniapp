@@ -19,7 +19,7 @@
   /* поля по краям контента — синхронизируются с нижним баром */
   --edge-left:16px;
   --edge-right:16px;
-
+  --content-max: 360px;
   --radius-sm:12px;
   --radius:18px;
   --radius-lg:22px;

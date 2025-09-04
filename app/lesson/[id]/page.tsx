@@ -3,8 +3,7 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** Ровно как у мини-бара */
-const WRAP = 'mx-auto max-w-[360px] px-4';
+const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
 type Tab = 'desc' | 'test' | 'materials';
 
@@ -26,8 +25,8 @@ export default function LessonPage() {
 
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Заголовок, как на главной */}
-      <header className="mb-3">
+      {/* Заголовок */}
+      <header className="mb-3 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">{title}</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
       </header>
@@ -40,7 +39,7 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* Табы: 3 равные, 44px, бордер между ними */}
+      {/* Табы */}
       <div className="w-full mb-3">
         <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[var(--border)]">
           {[
@@ -53,13 +52,13 @@ export default function LessonPage() {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className={`h-11 w-full flex items-center justify-center gap-1.5 text-sm
-                  ${active ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface)] text-[var(--fg)]'}
+                className={`min-h-11 h-auto py-2 w-full flex items-center justify-center gap-1.5
+                  text-sm ${active ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface)] text-[var(--fg)]'}
                   ${i !== 0 ? 'border-l border-[var(--border)]' : ''}`}
                 aria-pressed={active}
               >
                 <span>{t.icon}</span>
-                <span className="whitespace-nowrap">{t.label}</span>
+                <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">{t.label}</span>
               </button>
             );
           })}
@@ -88,47 +87,49 @@ export default function LessonPage() {
         </section>
       )}
 
-      {/* Нижняя навигация — гибкая сетка с переносами */}
-      <div className="mt-4 w-full flex flex-wrap items-stretch gap-2">
-        {/* Чипы слева */}
-        <button
-          onClick={() => router.push('/courses')}
-          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center gap-2 text-sm"
-          title="К списку уроков"
-        >
-          <span>📚</span><span className="whitespace-nowrap">К списку</span>
-        </button>
-
+      {/* Нижняя навигация (адаптивная grid) */}
+      <div
+        className="mt-4 w-full grid gap-2"
+        style={{ gridTemplateColumns: '1fr auto' }}
+      >
+        {/* На главную + Пройдено (1-я строка) */}
         <button
           onClick={() => router.push('/')}
-          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center gap-2 text-sm"
+          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
+                     flex items-center justify-center gap-2 text-sm w-full"
           title="На главную"
         >
-          <span>🏠</span><span className="whitespace-nowrap">На главную</span>
+          <span>🏠</span>
+          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">На главную</span>
         </button>
 
-        {/* Основные по центру: занимают максимум места и прижимаются между чипами и бейджем */}
+        <div className="px-3 h-11 rounded-xl border border-[var(--border)]
+                        bg-[color-mix(in_oklab,green_45%,var(--surface))] text-black font-semibold
+                        grid place-items-center text-sm whitespace-nowrap">
+          ✔ Пройдено
+        </div>
+
+        {/* Предыдущий / Следующий — во всю ширину (2-я строка) */}
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="flex-1 min-w-[42%] h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+          className="col-span-2 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)]
+                     font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
           title="Предыдущий"
         >
-          <span>←</span><span className="whitespace-nowrap">Предыдущий</span>
+          <span>←</span>
+          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">Предыдущий</span>
         </button>
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="flex-1 min-w-[42%] h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm flex items-center justify-center gap-2"
+          className="col-span-2 h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm
+                     flex items-center justify-center gap-2"
           title="Следующий"
         >
-          <span className="whitespace-nowrap">Следующий</span><span>→</span>
+          <span className="whitespace-nowrap [font-size:clamp(12px,2.8vw,14px)]">Следующий</span>
+          <span>→</span>
         </button>
-
-        {/* Бейдж статуса справа/в конце ряда */}
-        <div className="px-3 h-11 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm">
-          <span className="whitespace-nowrap">✔ Пройдено</span>
-        </div>
       </div>
 
       <div className="pb-24" />

@@ -3,14 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
-import {
-  listLessons,
-  getRandomDailyQuote,
-  getUserProgress,
-  saveUserProgress,
-} from '@/lib/db';
+import { listLessons, getRandomDailyQuote, getUserProgress, saveUserProgress } from '@/lib/db';
 
-/* ───────────────── types / const ───────────────── */
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
@@ -19,8 +13,8 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** Единый контейнер: ровно как у нижнего мини-бара */
-const WRAP = 'mx-auto max-w-[360px] px-4';
+/** Совпадает с мини-баром */
+const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
@@ -32,7 +26,6 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
-/* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
@@ -64,7 +57,6 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* uid общий */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -73,15 +65,11 @@ function getClientUid(): string {
     const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
     localStorage.setItem(UID_KEY, gen);
     return gen;
-  } catch {
-    return 'anonymous';
-  }
+  } catch { return 'anonymous'; }
 }
 
-/* ───────────────── component ───────────────── */
 export default function Home() {
   const router = useRouter();
-
   const [firstName, setFirstName] = useState<string | null>(null);
   const [env, setEnv] = useState<Env>('loading');
 
@@ -95,7 +83,6 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* вычисления */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
     () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
@@ -114,12 +101,10 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* Telegram / demo */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
     let cancelled = false;
-
     const detect = async () => {
       for (let i = 0; i < 10; i++) {
         const wa = (window as any)?.Telegram?.WebApp;
@@ -146,7 +131,6 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* уроки + переименование */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -156,7 +140,6 @@ export default function Home() {
         const mapped: Lesson[] = rows
           .sort((a: any, b: any) => (a.order_index ?? a.id) - (b.order_index ?? b.id))
           .map((r: any) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
-
         const names: Record<number, string> = {
           1: 'Крипта без сложных слов: что это и зачем тебе',
           2: 'Арбитраж: простой способ зарабатывать на обмене крипты',
@@ -181,7 +164,6 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* цитата */
   useEffect(() => {
     (async () => {
       try {
@@ -198,7 +180,6 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс */
   useEffect(() => {
     const uid = getClientUid();
     (async () => {
@@ -231,7 +212,6 @@ export default function Home() {
     })();
   }, []);
 
-  /* обновлять прогресс при возврате */
   useEffect(() => {
     const refresh = () => {
       try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
@@ -242,7 +222,6 @@ export default function Home() {
     return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
-  /* сохранение + ачивки */
   useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
@@ -259,10 +238,8 @@ export default function Home() {
     try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
     try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
     (async () => { try { await saveUserProgress(getClientUid(), progress); } catch {} })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* чип уровня (компактный) */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
@@ -287,7 +264,6 @@ export default function Home() {
     );
   };
 
-  /* гейт */
   if (env === 'loading') return null;
   if (env === 'browser') {
     return (
@@ -300,12 +276,10 @@ export default function Home() {
     );
   }
 
-  /* разметка */
   return (
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
-      {/* Шапка */}
       <header className="mb-5 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
@@ -319,7 +293,7 @@ export default function Home() {
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень — компактнее */}
+        {/* очки + уровень */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-3 py-1.5 w-full justify-center text-xs">
@@ -346,7 +320,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — 2×N, текст не обрезаем, шрифт авто-уменьшается, максимум 2 строки, фикс. высота */}
+        {/* Ачивки — 2×N, высота как у чипов, текст адаптивный до 2 строк */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -359,13 +333,13 @@ export default function Home() {
             return (
               <div key={a.key} className="w-full">
                 <div
-                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 ${active ? '' : 'opacity-55'} h-12`}
+                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-10 ${active ? '' : 'opacity-55'}`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
                   <span className="text-sm shrink-0">{a.icon}</span>
                   <span
                     className="font-medium text-center leading-[1.15] break-words overflow-hidden
-                               [font-size:clamp(12px,3.3vw,14px)]"
+                               [font-size:clamp(12px,3.1vw,14px)]"
                     style={{ display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical' }}
                   >
                     {a.label}

@@ -90,7 +90,7 @@ export default function Home() {
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
-    first: false, unlock: false, fear: false, errors: false, arbitrager: false,
+    first: false, unlock: false, fear: false, errors: false, arbitrager: false
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
@@ -105,9 +105,6 @@ export default function Home() {
   const points = completedCount * POINTS_PER_LESSON;
 
   const xp = computeXP(completedCount, achievements);
-  theLevel: {
-    /* keep variable names tidy */
-  }
   const { key: levelKey, progressPct } = computeLevel(xp);
   const level = LEVELS[levelKey];
 
@@ -115,7 +112,7 @@ export default function Home() {
     () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
     []
   );
-  const coreLessons = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
+  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   /* Telegram / demo (берём имя) */
   useEffect(() => {
@@ -167,7 +164,7 @@ export default function Home() {
           4: '5 ошибок новичков, которые убивают заработок',
           5: 'Финал: твой первый шаг в мир крипты',
         };
-        const patched = mapped.map(m => (names[m.id] ? { ...m, title: names[m.id] } : m));
+        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
         setLessons(patched);
         try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
       } catch {
@@ -242,10 +239,7 @@ export default function Home() {
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', onVis);
-    };
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
   /* сохранение + ачивки */
@@ -273,7 +267,7 @@ export default function Home() {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
       <div
-        className="rounded-full p-[2px] w-full"
+        className="rounded-full p-[1px] w-full"
         style={{
           border: '1px solid transparent',
           background: `
@@ -284,7 +278,7 @@ export default function Home() {
         }}
       >
         <div
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-full"
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
           style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
         >
           {children}
@@ -325,18 +319,21 @@ export default function Home() {
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень */}
-        <div className="mt-4 grid grid-cols-2 gap-2 w-full">
+        {/* очки + уровень — компактнее */}
+        <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
-            <div className="chip px-4 py-2 w-full justify-center">
-              <span>🏆</span><span className="text-sm font-semibold">{points} очк.</span>
+            <div className="chip px-3 py-1.5 w-full justify-center text-xs">
+              <span>🏆</span><span className="font-semibold">{points} очк.</span>
             </div>
           </div>
-          <ChipRing pct={progressPct}><span>{level.icon}</span><span className="text-sm font-semibold">{level.title}</span></ChipRing>
+          <ChipRing pct={progressPct}>
+            <span className="text-sm">{level.icon}</span>
+            <span className="text-xs font-semibold">{level.title}</span>
+          </ChipRing>
         </div>
 
         {/* прогресс-бар */}
-        <div className="mt-3 w-full">
+        <div className="mt-2 w-full">
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden w-full">
             <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
             {checkpoints.map((p, i) => (
@@ -349,7 +346,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки: 2 в ряд, у каждой своя ширина по тексту */}
+        {/* Ачивки — меньше, 2 в ряд, ширина под текст */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -362,10 +359,10 @@ export default function Home() {
             return (
               <div key={a.key} className="flex">
                 <div
-                  className={`inline-flex px-3 py-2 rounded-full border items-center gap-1 text-[12px] ${active ? '' : 'opacity-55'}`}
+                  className={`inline-flex px-2.5 py-1.5 rounded-full border items-center gap-1 text-xs ${active ? '' : 'opacity-55'}`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
-                  <span className="text-[14px]">{a.icon}</span>
+                  <span className="text-sm">{a.icon}</span>
                   <span className="font-medium whitespace-nowrap">{a.label}</span>
                 </div>
               </div>

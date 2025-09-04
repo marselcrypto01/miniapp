@@ -3,7 +3,7 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-/** Тот же контейнер, что у нижнего бара */
+/** ТОЧНО как у бара */
 const WRAP = 'mx-auto max-w-xl px-4';
 
 export default function LessonPage() {
@@ -45,7 +45,7 @@ export default function LessonPage() {
         </button>
       </div>
 
-      {/* Контент «Описание» */}
+      {/* Контент */}
       <section className="glass p-4 rounded-2xl w-full">
         <ul className="list-disc pl-5 space-y-2 text-[14px]">
           <li>Базовая терминология и что такое крипта.</li>
@@ -55,11 +55,11 @@ export default function LessonPage() {
         </ul>
       </section>
 
-      {/* Нижняя навигация — стрелки */}
-      <div className="mt-4 grid grid-cols-[auto_1fr_1fr_auto] gap-2 w-full">
+      {/* Нижняя навигация — квадратные иконки, стрелки без текста */}
+      <div className="mt-4 grid grid-cols-4 gap-2 w-full">
         <button
           onClick={() => router.push('/')}
-          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] grid place-items-center text-sm"
+          className="h-12 rounded-xl border border-[var(--border)] bg-[var(--surface)] grid place-items-center text-base"
           title="К списку уроков"
         >
           📚
@@ -68,7 +68,7 @@ export default function LessonPage() {
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
-          className="h-10 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 grid place-items-center"
+          className="h-12 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-base disabled:opacity-50 grid place-items-center"
           title="Предыдущий"
         >
           ←
@@ -76,18 +76,18 @@ export default function LessonPage() {
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
-          className="h-10 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm grid place-items-center"
+          className="h-12 rounded-xl bg-[var(--brand)] text-black font-semibold text-base grid place-items-center"
           title="Следующий"
         >
           →
         </button>
 
-        <div
-          className="px-3 h-10 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm"
+        <button
+          className="h-12 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-base"
           title="Отметить пройдено"
         >
           ✔
-        </div>
+        </button>
       </div>
 
       <div className="pb-24" />

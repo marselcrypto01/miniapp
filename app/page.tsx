@@ -3,14 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
-import {
-  listLessons,
-  getRandomDailyQuote,
-  getUserProgress,
-  saveUserProgress,
-} from '@/lib/db';
+import { listLessons, getRandomDailyQuote, getUserProgress, saveUserProgress } from '@/lib/db';
 
-/* ───────────────── types / const ───────────────── */
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
@@ -19,11 +13,10 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** ВАЖНО: тот же контейнер, что и у нижнего бара */
+/** ТОЧНО та же ширина, что у BottomNav: mx-auto max-w-xl px-4 */
 const WRAP = 'mx-auto max-w-xl px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
-
 const QUOTES = [
   'Учись видеть возможности там, где другие видят шум.',
   'Успех любит дисциплину.',
@@ -32,7 +25,6 @@ const QUOTES = [
   'Малые действия каждый день сильнее больших рывков раз в месяц.',
 ];
 
-/* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
   novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
@@ -64,7 +56,6 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* uid общий */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -78,7 +69,6 @@ function getClientUid(): string {
   }
 }
 
-/* ───────────────── component ───────────────── */
 export default function Home() {
   const router = useRouter();
 
@@ -90,12 +80,11 @@ export default function Home() {
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
-    first: false, unlock: false, fear: false, errors: false, arbitrager: false
+    first: false, unlock: false, fear: false, errors: false, arbitrager: false,
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* вычисления */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
     () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
@@ -112,9 +101,8 @@ export default function Home() {
     () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
     []
   );
-  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
+  const coreLessons = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* Telegram / demo (берём имя) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
@@ -146,7 +134,6 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* уроки + переименование */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -181,7 +168,6 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* цитата */
   useEffect(() => {
     (async () => {
       try {
@@ -198,7 +184,6 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс */
   useEffect(() => {
     const uid = getClientUid();
     (async () => {
@@ -231,7 +216,6 @@ export default function Home() {
     })();
   }, []);
 
-  /* обновлять прогресс при возврате */
   useEffect(() => {
     const refresh = () => {
       try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {}
@@ -242,15 +226,14 @@ export default function Home() {
     return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
-  /* сохранение + ачивки */
   useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
-    const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
-    if (isCompleted(1)) next.first = true;
-    if (isCompleted(2)) next.unlock = true;
-    if (isCompleted(3)) next.fear = true;
-    if (isCompleted(4)) next.errors = true;
+    const _isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+    if (_isCompleted(1)) next.first = true;
+    if (_isCompleted(2)) next.unlock = true;
+    if (_isCompleted(3)) next.fear = true;
+    if (_isCompleted(4)) next.errors = true;
     if (completedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
     setAchievements(next);
     try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
@@ -262,12 +245,11 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* чип уровня */
-  const ChipRing: React.FC<{ pct: number; children: React.ReactNode; className?: string }> = ({ pct, children, className }) => {
+  const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
       <div
-        className={`rounded-full p-[2px] w-full ${className || ''}`}
+        className="rounded-full p-[2px] w-full"
         style={{
           border: '1px solid transparent',
           background: `
@@ -285,7 +267,6 @@ export default function Home() {
     );
   };
 
-  /* гейт */
   if (env === 'loading') return null;
   if (env === 'browser') {
     return (
@@ -298,12 +279,10 @@ export default function Home() {
     );
   }
 
-  /* разметка */
   return (
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
 
-      {/* Шапка */}
       <header className="mb-5 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
@@ -317,7 +296,6 @@ export default function Home() {
           <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
         </blockquote>
 
-        {/* очки + уровень */}
         <div className="mt-4 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-4 py-2 w-full justify-center">
@@ -327,7 +305,6 @@ export default function Home() {
           <ChipRing pct={progressPct}><span>{level.icon}</span><span className="text-sm font-semibold">{level.title}</span></ChipRing>
         </div>
 
-        {/* прогресс-бар */}
         <div className="mt-3 w-full">
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden w-full">
             <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
@@ -341,8 +318,8 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — авто-ширина под текст */}
-        <div className="mt-3 flex flex-wrap items-center gap-2 w-full">
+        {/* Ачивки: ровно 2 в ряд */}
+        <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
             { key: 'unlock' as const, icon: '🔓', label: 'Разблокировал знания' },
@@ -354,18 +331,17 @@ export default function Home() {
             return (
               <div
                 key={a.key}
-                className={`inline-flex px-3 py-2 rounded-full border items-center justify-center gap-1 text-[12px] max-w-full ${active ? '' : 'opacity-55'}`}
+                className={`px-3 py-2 rounded-full border flex items-center justify-center gap-1 text-[12px] ${active ? '' : 'opacity-55'}`}
                 style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
               >
-                <span className="text-[14px] shrink-0">{a.icon}</span>
-                <span className="font-medium text-center whitespace-nowrap">{a.label}</span>
+                <span className="text-[14px]">{a.icon}</span>
+                <span className="font-medium text-center">{a.label}</span>
               </div>
             );
           })}
         </div>
       </header>
 
-      {/* Уроки */}
       <section className="w-full">
         <h2 className="text-xl font-bold mb-2">Уроки</h2>
         <div className="space-y-3 w-full">
@@ -387,7 +363,6 @@ export default function Home() {
           })}
         </div>
 
-        {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
         <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
 

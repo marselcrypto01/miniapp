@@ -56,7 +56,7 @@ export default function BottomNav() {
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
     >
       {/* этот див — тот самый контейнер, по нему выравниваемся */}
-      <div data-mainbar-inner className="mx-auto max-w-xl px-4">
+      <div data-mainbar-inner className="mx-auto max-w-[360px] px-4">
         <div className="glass flex items-center justify-between rounded-[16px] px-2">
           <Item href="/" label="Главная" icon="🏠" />
           <Item href="/courses" label="Курсы" icon={lockedCourses ? '🔒' : '🎓'} disabled={lockedCourses} />

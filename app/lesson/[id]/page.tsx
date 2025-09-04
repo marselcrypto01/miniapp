@@ -3,9 +3,18 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 
-const WRAP = 'mx-auto max-w-xl px-4';
+/** Совпадает с мини-баром */
+const WRAP = 'mx-auto max-w-[360px] px-4';
 
 type Tab = 'desc' | 'test' | 'materials';
+
+const TITLES: Record<number, string> = {
+  1: 'Крипта без сложных слов',
+  2: 'Арбитраж: простой способ зарабатывать',
+  3: 'Риски и страхи: как не потерять на старте',
+  4: '5 ошибок новичков, которые убивают заработок',
+  5: 'Финал: твой первый шаг в мир крипты',
+};
 
 export default function LessonPage() {
   const router = useRouter();
@@ -14,18 +23,15 @@ export default function LessonPage() {
 
   const [tab, setTab] = React.useState<Tab>('desc');
 
+  const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
+
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Верхняя навигация */}
-      <div className="flex items-center justify-between gap-2 mb-3 w-full">
-        <button onClick={() => router.back()} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
-          <span>←</span><span className="font-semibold">Назад</span>
-        </button>
-        <div className="text-sm font-extrabold opacity-80 text-center grow">Урок {id}</div>
-        <button onClick={() => router.push('/')} className="px-3 h-9 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center gap-2 text-sm shrink-0">
-          <span>🏠</span><span className="font-semibold">На главную</span>
-        </button>
-      </div>
+      {/* Заголовок, как на главной */}
+      <header className="mb-3">
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">{title}</h1>
+        <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
+      </header>
 
       {/* Плеер */}
       <section className="glass p-4 rounded-2xl mb-3 w-full">
@@ -35,32 +41,30 @@ export default function LessonPage() {
         </div>
       </section>
 
-      {/* Табы — кликабельные */}
-      <div className="grid grid-cols-3 gap-2 mb-3 w-full">
-        <button
-          onClick={() => setTab('desc')}
-          aria-pressed={tab === 'desc'}
-          className={`h-9 rounded-xl border font-semibold text-sm flex items-center justify-center gap-1.5
-            ${tab === 'desc' ? 'bg-[var(--brand)] text-black border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)]'}`}
-        >
-          <span>📝</span><span>Описание</span>
-        </button>
-        <button
-          onClick={() => setTab('test')}
-          aria-pressed={tab === 'test'}
-          className={`h-9 rounded-xl border font-semibold text-sm flex items-center justify-center gap-1.5
-            ${tab === 'test' ? 'bg-[var(--brand)] text-black border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)]'}`}
-        >
-          <span>✅</span><span>Тест</span>
-        </button>
-        <button
-          onClick={() => setTab('materials')}
-          aria-pressed={tab === 'materials'}
-          className={`h-9 rounded-xl border font-semibold text-sm flex items-center justify-center gap-1.5
-            ${tab === 'materials' ? 'bg-[var(--brand)] text-black border-[var(--brand)]' : 'bg-[var(--surface)] border-[var(--border)]'}`}
-        >
-          <span>📎</span><span>Материалы</span>
-        </button>
+      {/* Табы: 3 равные, 40–44px, бордер между ними */}
+      <div className="w-full mb-3">
+        <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[var(--border)]">
+          {[
+            { key: 'desc' as const, label: 'Описание', icon: '📝' },
+            { key: 'test' as const, label: 'Тест', icon: '✅' },
+            { key: 'materials' as const, label: 'Материалы', icon: '📎' },
+          ].map((t, i) => {
+            const active = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`h-11 w-full flex items-center justify-center gap-1.5 text-sm
+                  ${active ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface)] text-[var(--fg)]'}
+                  ${i !== 0 ? 'border-l border-[var(--border)]' : ''}`}
+                aria-pressed={active}
+              >
+                <span>{t.icon}</span>
+                <span className="whitespace-nowrap">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Контент табов */}
@@ -76,40 +80,56 @@ export default function LessonPage() {
       )}
       {tab === 'test' && (
         <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">
-          Здесь будет мини-квиз по уроку.
+          Мини-квиз по уроку (заглушка).
         </section>
       )}
       {tab === 'materials' && (
         <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">
-          Доп. материалы и ссылки.
+          Дополнительные материалы и ссылки (заглушка).
         </section>
       )}
 
-      {/* Нижняя навигация: только Предыдущий / Следующий / Пройдено */}
-      <div className="mt-4 grid grid-cols-3 gap-2 w-full">
+      {/* Нижняя навигация — одна линия, общая высота 44–48px */}
+      <div className="mt-4 grid grid-cols-[auto_auto_1fr_1fr_auto] gap-2 w-full">
+        {/* Вторичные */}
+        <button
+          onClick={() => router.push('/courses')}
+          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center gap-2 text-sm"
+          title="К списку уроков"
+        >
+          <span>📚</span><span className="whitespace-nowrap">К списку</span>
+        </button>
+
+        <button
+          onClick={() => router.push('/')}
+          className="px-3 h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center gap-2 text-sm"
+          title="На главную"
+        >
+          <span>🏠</span><span className="whitespace-nowrap">На главную</span>
+        </button>
+
+        {/* Основные, одинаковой ширины */}
         <button
           onClick={() => id > 1 && router.push(`/lesson/${id - 1}`)}
           disabled={id <= 1}
           className="h-11 rounded-xl bg-[var(--surface)] border border-[var(--border)] font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
-          title="Предыдущий урок"
+          title="Предыдущий"
         >
-          <span>←</span><span>Предыдущий</span>
+          <span>←</span><span className="whitespace-nowrap">Предыдущий</span>
         </button>
 
         <button
           onClick={() => router.push(`/lesson/${id + 1}`)}
           className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold text-sm flex items-center justify-center gap-2"
-          title="Следующий урок"
+          title="Следующий"
         >
-          <span>Следующий</span><span>→</span>
+          <span className="whitespace-nowrap">Следующий</span><span>→</span>
         </button>
 
-        <button
-          className="h-11 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold text-sm flex items-center justify-center gap-2"
-          title="Отметить как пройдено"
-        >
-          <span>✔</span><span>Пройдено</span>
-        </button>
+        {/* Бейдж статуса (не кнопка) */}
+        <div className="px-3 h-11 rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,green 45%,var(--surface))] text-black font-semibold grid place-items-center text-sm">
+          <span className="whitespace-nowrap">✔ Пройдено</span>
+        </div>
       </div>
 
       <div className="pb-24" />

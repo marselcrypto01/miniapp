@@ -19,8 +19,8 @@ type Env = 'loading' | 'telegram' | 'browser';
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON = 100;
 
-/** ТОЧНО как у BottomNav: mx-auto max-w-xl px-4 */
-const WRAP = 'mx-auto max-w-xl px-4';
+/** Единый контейнер под мини-бар: 360px */
+const WRAP = 'mx-auto max-w-[360px] px-4';
 
 const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
@@ -262,7 +262,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, progressLoaded, completedCount]);
 
-  /* чип уровня */
+  /* чип уровня (компактный) */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
@@ -346,7 +346,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Ачивки — меньше, 2 в ряд, ширина под текст */}
+        {/* Ачивки — сетка 2×N, центр, обрезка «…» */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           {[
             { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
@@ -357,13 +357,13 @@ export default function Home() {
           ].map(a => {
             const active = achievements[a.key];
             return (
-              <div key={a.key} className="flex">
+              <div key={a.key} className="w-full">
                 <div
-                  className={`inline-flex px-2.5 py-1.5 rounded-full border items-center gap-1 text-xs ${active ? '' : 'opacity-55'}`}
+                  className={`w-full px-3 py-1.5 rounded-full border flex items-center justify-center gap-1 text-xs ${active ? '' : 'opacity-55'}`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
-                  <span className="text-sm">{a.icon}</span>
-                  <span className="font-medium whitespace-nowrap">{a.label}</span>
+                  <span className="text-sm shrink-0">{a.icon}</span>
+                  <span className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{a.label}</span>
                 </div>
               </div>
             );

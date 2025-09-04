@@ -1,212 +1,170 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { getUserProgress, saveUserProgress } from '@/lib/db';
 
-/** Заголовки (замените на свои при необходимости) */
-const TITLES: Record<number, string> = {
-  1: 'Крипта простыми словами',
-  2: 'Арбитраж: как это работает',
-  3: 'Риски, мифы и страхи',
-  4: 'Главные ошибки новичков',
-  5: 'Итог: как двигаться дальше',
-  6: 'Дополнительные материалы',
-};
+const CORE_LESSONS_COUNT = 5;
 
-type TabKey = 'desc' | 'test' | 'materials';
+type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 
 export default function LessonPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const id = Number(params?.id ?? 1);
+  const id = Number(params.id || 1);
 
-  const [tab, setTab] = useState<TabKey>('desc');
+  const [active, setActive] = useState<'desc' | 'test' | 'materials'>('desc');
+  const [progress, setProgress] = useState<Progress[]>([]);
+  const isCompleted = useMemo(
+    () => progress.find(p => p.lesson_id === id)?.status === 'completed',
+    [progress, id]
+  );
 
-  const title = useMemo(() => TITLES[id] || `Урок ${id}`, [id]);
+  // load progress (LS / DB)
+  useEffect(() => {
+    (async () => {
+      try {
+        const uid = (typeof localStorage !== 'undefined' && localStorage.getItem('presence_uid')) || 'anonymous';
+        const rows = await getUserProgress(uid);
+        if (rows?.length) {
+          setProgress(rows.map((r: any) => ({ lesson_id: Number(r.lesson_id), status: r.status })));
+        } else {
+          const raw = localStorage.getItem('progress');
+          if (raw) setProgress(JSON.parse(raw));
+        }
+      } catch {
+        const raw = localStorage.getItem('progress');
+        if (raw) setProgress(JSON.parse(raw));
+      }
+    })();
+  }, []);
 
-  const goHome = () => router.push('/');
-  const goBack  = () => router.back();
-  const goNext  = () => router.push(`/lesson/${id + 1}`);
-  const goPrev  = () => router.push(`/lesson/${Math.max(1, id - 1)}`);
+  const markCompleted = async () => {
+    const next = [...progress.filter(p => p.lesson_id !== id), { lesson_id: id, status: 'completed' as const }];
+    setProgress(next);
+    try { localStorage.setItem('progress', JSON.stringify(next)); } catch {}
+    try {
+      const uid = (typeof localStorage !== 'undefined' && localStorage.getItem('presence_uid')) || 'anonymous';
+      await saveUserProgress(uid, next);
+    } catch {}
+  };
 
-  /** Сколько колонок в нижнем ряду действий */
-  const actionCols = id > 1 ? 4 : 3;
+  const goPrev = () => id > 1 && router.push(`/lesson/${id - 1}`);
+  const goNext = () => id < CORE_LESSONS_COUNT && router.push(`/lesson/${id + 1}`);
 
   return (
     <main className="mx-auto w-full max-w-[720px] px-4 py-4">
-
-      {/* ======== TOP BAR: [назад] [ЗАГОЛОВОК] [на главную] ======== */}
-      <header className="mb-4 grid grid-cols-[auto_1fr_auto] items-center gap-2">
+      {/* Top nav */}
+      <div className="flex items-center justify-between gap-2">
         <button
-          onClick={goBack}
-          className="inline-flex items-center gap-2 text-sm text-[var(--fg)]/85 hover:text-[var(--fg)]"
-          aria-label="Назад"
+          onClick={() => router.back()}
+          className="h-10 px-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2"
         >
-          <span className="text-lg leading-none">←</span>
-          <span>Назад</span>
+          <span>←</span><span className="font-semibold">Назад</span>
         </button>
-
-        <h1 className="text-center text-xl sm:text-2xl font-extrabold tracking-tight truncate px-2">
-          {title}
-        </h1>
-
-        <button
-          onClick={goHome}
-          className="text-sm text-[var(--muted)] hover:text-[var(--fg)]"
-        >
-          На главную
-        </button>
-      </header>
-
-      {/* ======== Блок видео ======== */}
-      <section className="glass rounded-[18px] p-4 mb-3">
-        <div className="flex items-center gap-2 text-[15px] font-semibold">
-          <span>🎬</span>
-          <span>Видео-урок #{id}</span>
+        <div className="text-center grow px-2">
+          <h1 className="text-lg sm:text-xl font-extrabold leading-tight truncate">
+            {`Урок ${id}`}
+          </h1>
         </div>
-        <p className="mt-2 text-[13px] sm:text-sm text-[var(--muted)]">
-          Здесь будет встроенный плеер (YouTube / Vimeo / файл).
-        </p>
-
-        <div className="mt-3 aspect-video w-full rounded-[14px] border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)] grid place-items-center text-[var(--muted)]">
-          Плеер (placeholder)
-        </div>
-      </section>
-
-      {/* ======== ТАБЫ — один горизонтальный ряд (скроллится при нехватке места) ======== */}
-      <div
-        className="
-          mt-2 mb-3 inline-flex w-full overflow-x-auto whitespace-nowrap
-          rounded-2xl border border-[var(--border)]
-          bg-[color-mix(in_oklab,var(--surface) 85%,transparent)] p-1
-          shadow-[0_6px_18px_rgba(0,0,0,.25)]
-        "
-      >
-        {[
-          { k: 'desc' as TabKey, label: 'Описание',  icon: '📝' },
-          { k: 'test' as TabKey, label: 'Тест',      icon: '✅' },
-          { k: 'materials' as TabKey, label: 'Материалы', icon: '📎' },
-        ].map((t) => {
-          const active = tab === t.k;
-          return (
-            <button
-              key={t.k}
-              onClick={() => setTab(t.k)}
-              className={[
-                'mx-0.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors',
-                active
-                  ? 'bg-[var(--brand)] text-black'
-                  : 'text-[var(--fg)]/85 hover:bg-[color-mix(in_oklab,var(--surface-2) 45%,transparent)]',
-              ].join(' ')}
-            >
-              <span className="mr-1">{t.icon}</span>
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ======== Контент табов ======== */}
-      {tab === 'desc' && (
-        <div className="glass rounded-[18px] p-4">
-          <p className="text-[14px] text-[var(--fg)]/90 mb-2">
-            Базовая терминология и что такое крипта.
-          </p>
-          <ul className="list-disc pl-5 space-y-1 text-[13px] text-[var(--muted)]">
-            <li>Главная идея урока</li>
-            <li>3–5 ключевых тезисов</li>
-            <li>Что сделать после просмотра</li>
-          </ul>
-        </div>
-      )}
-
-      {tab === 'test' && (
-        <div className="glass rounded-[18px] p-4">
-          <p className="text-[14px] text-[var(--fg)]/90">
-            Короткий тест по материалу: 3–5 вопросов с вариантами.
-          </p>
-          <p className="text-[12px] text-[var(--muted)] mt-1">Скоро 🔧</p>
-        </div>
-      )}
-
-      {tab === 'materials' && (
-        <div className="glass rounded-[18px] p-4">
-          <p className="text-[14px] text-[var(--fg)]/90 mb-2">
-            Материалы к уроку:
-          </p>
-          <ul className="list-disc pl-5 space-y-1 text-[13px] text-[var(--muted)]">
-            <li>Ссылки на биржи и статьи</li>
-            <li>Шпаргалка / PDF</li>
-            <li>Чек-лист действий</li>
-          </ul>
-        </div>
-      )}
-
-      {/* ======== Нижний ряд действий — ВСЕГДА В РЯД ======== */}
-      <div
-        className="mt-4 gap-2"
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${actionCols}, minmax(0,1fr))` }}
-      >
         <button
           onClick={() => router.push('/')}
-          className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
-            border border-[var(--border)] bg-[var(--surface)]
-            shadow-[0_10px_26px_rgba(0,0,0,.25)]
-            hover:brightness-105 active:translate-y-[1px]
-            text-[14px] font-semibold
-          "
+          className="h-10 px-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2"
         >
-          <span>📚</span>
-          <span>К списку</span>
-        </button>
-
-        {id > 1 && (
-          <button
-            onClick={goPrev}
-            className="
-              inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
-              border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)]
-              shadow-[0_10px_26px_rgba(0,0,0,.25)]
-              hover:brightness-105 active:translate-y-[1px]
-              text-[14px] font-semibold
-            "
-          >
-            <span>⬅️</span>
-            <span>Предыд.</span>
-          </button>
-        )}
-
-        <button
-          onClick={goNext}
-          className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
-            bg-[var(--brand)] text-black
-            shadow-[0_10px_26px_rgba(0,0,0,.25)]
-            hover:brightness-105 active:translate-y-[1px]
-            text-[14px] font-extrabold
-          "
-        >
-          <span>➡️</span>
-          <span>Следующий</span>
-        </button>
-
-        <button
-          onClick={() => alert('Отметили как пройдено ✓')}
-          className="
-            inline-flex items-center justify-center gap-2 rounded-2xl px-3 py-3
-            border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface-2) 70%,transparent)]
-            shadow-[0_10px_26px_rgba(0,0,0,.25)]
-            hover:brightness-105 active:translate-y-[1px]
-            text-[14px] font-semibold
-          "
-        >
-          <span>✅</span>
-          <span>Пройдено</span>
+          <span>🏠</span><span className="font-semibold">На главную</span>
         </button>
       </div>
 
-      <div className="h-24" />
+      {/* Video / placeholder */}
+      <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+        <div className="text-[15px] font-semibold mb-2">🎬 Видео-урок #{id}</div>
+        <div className="rounded-xl border border-[var(--border)] bg-[color-mix(in_oklab,var(--surface) 85%,transparent)] h-44 grid place-items-center text-[var(--muted)]">
+          Плеер (placeholder)
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
+        <div className="grid grid-cols-3 gap-1">
+          {[
+            { k: 'desc' as const, label: 'Описание' },
+            { k: 'test' as const, label: 'Тест' },
+            { k: 'materials' as const, label: 'Материалы' },
+          ].map(t => {
+            const activeTab = active === t.k;
+            return (
+              <button
+                key={t.k}
+                onClick={() => setActive(t.k)}
+                className={`h-10 rounded-xl font-semibold ${activeTab ? 'text-black' : 'text-[var(--fg)]'}`}
+                style={{
+                  background: activeTab ? 'var(--brand)' : 'var(--surface-2)',
+                  border: '1px solid var(--border)',
+                }}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-3 text-sm text-[var(--fg)]">
+          {active === 'desc' && (
+            <ul className="list-disc pl-5 space-y-1 text-[var(--fg)]">
+              <li>Базовая терминология и что такое крипта</li>
+              <li>Главная идея урока</li>
+              <li>3–5 ключевых тезисов</li>
+              <li>Что сделать после просмотра</li>
+            </ul>
+          )}
+          {active === 'test' && (
+            <div className="text-[var(--muted)]">Мини-тест появится здесь.</div>
+          )}
+          {active === 'materials' && (
+            <div className="text-[var(--muted)]">Материалы и ссылки к уроку.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom actions */}
+      <div className="mt-4 flex items-stretch gap-2 flex-wrap">
+        <button
+          onClick={() => router.push('/')}
+          className="h-11 px-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] flex items-center gap-2"
+          title="К списку уроков"
+        >
+          <span>📚</span><span className="font-semibold">К списку</span>
+        </button>
+
+        <div className="flex-1 flex items-stretch gap-2 min-w-[220px]">
+          <button
+            onClick={goPrev}
+            disabled={id <= 1}
+            className="h-11 grow rounded-xl font-semibold disabled:opacity-50 text-black"
+            style={{ background: 'var(--brand)', border: '1px solid var(--border)' }}
+          >
+            ← Предыдущий
+          </button>
+          <button
+            onClick={goNext}
+            disabled={id >= CORE_LESSONS_COUNT}
+            className="h-11 grow rounded-xl font-semibold disabled:opacity-50 text-black"
+            style={{ background: 'var(--brand)', border: '1px solid var(--border)' }}
+          >
+            Следующий →
+          </button>
+        </div>
+
+        <div
+          className="h-11 px-3 rounded-xl border flex items-center gap-2"
+          style={{ background: 'color-mix(in oklab, #22c55e 25%, var(--surface) 75%)', borderColor: 'var(--border)' }}
+          title={isCompleted ? 'Урок отмечен как пройден' : 'Отметить как пройденный'}
+          onClick={!isCompleted ? markCompleted : undefined}
+        >
+          <span>✔</span>
+          <span className="font-semibold">{isCompleted ? 'Пройдено' : 'Отметить'}</span>
+        </div>
+      </div>
     </main>
   );
 }

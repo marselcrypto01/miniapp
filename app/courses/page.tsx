@@ -1,7 +1,8 @@
+// app/courses/page.tsx
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { createLead } from '@/lib/db';
+import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
 /** ширина = как у мини-бара через переменную в globals.css */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
@@ -20,7 +21,14 @@ const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 export default function CoursesPage() {
-  /* блокировка CTA до прохождения базового курса (оставь/убери по необходимости) */
+  const [authReady, setAuthReady] = useState(false);
+  useEffect(() => {
+    (async () => {
+      try { await initSupabaseFromTelegram(); } finally { setAuthReady(true); }
+    })();
+  }, []);
+
+  /* блокировка CTA до прохождения базового курса (можно убрать, если не нужно) */
   const [locked, setLocked] = useState(true);
   useEffect(() => {
     try { setLocked(!(localStorage.getItem('all_completed') === 'true')); } catch {}
@@ -29,8 +37,7 @@ export default function CoursesPage() {
   /* аккордеоны */
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
 
-  /* bottom sheet и модалка заявки */
-  const [sheet, setSheet] = useState(false);
+  /* модалка заявки */
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
   /* автоподстановка из Telegram */
@@ -77,7 +84,7 @@ export default function CoursesPage() {
       audience:
         '«Полный новичок», кому нужен понятный старт и доход, который покрывает аренду квартиры или базовые расходы. Никто не уходит без работающего способа.',
       result:
-        'Базовая система арбитража: стабильный доход от ~70 000 ₽/мес, понимание рисков, умение масштабировать и адаптировать связки под себя. Это не одна «схема», а комплекс навыков и инструментов.',
+        'Базовая система арбитража: стабильный доход от ~70 000 ₽/мес, понимание рисков, умение масштабировать и адаптировать связки под себя.',
       time: '1–2 часа в день, старт — раз в месяц',
       price: '50 000 ₽. Доступна официальная рассрочка Сбербанка.',
     },
@@ -88,22 +95,18 @@ export default function CoursesPage() {
         'Личное обучение с Марселем. Ускоренный старт, доход со второго дня и бессрочная поддержка.',
       chips: ['🎯 1:1 созвоны', '🧩 Личные связки', '♾ Бессрочная поддержка'],
       bullets: [
-        'Индивидуальная многослойная стратегия под ваши цели',
-        '2 связки без карт (до ~3% к капиталу в день) и 3 связки с картами (до ~10% к капиталу в день)',
+        'Индивидуальная стратегия под ваши цели',
+        '2 связки без карт (до ~3%/день) и 3 связки с картами (до ~10%/день)',
         'Заработок со 2-го дня обучения',
         'Таблица учёта сделок и дохода',
-        'Масштабирование дохода: переход от «ручного» к системному',
+        'Масштабирование дохода',
         'Бессрочная поддержка',
-        'Доступ в клуб КриптоМарс:',
-        'Чат с учениками — разбор кейсов, помощь в спорных ситуациях',
-        'Полезные материалы — мануалы, гайды, новые связки',
-        'Чат про мошенников — свежие схемы, как не попасться',
-        'Чат с проверенными офлайн-обменниками',
+        'Доступ в клуб КриптоМарс (чаты и материалы)',
       ],
       audience:
-        'Тем, кому нужен быстрый и прогнозируемый результат, индивидуальный подход и настройка заработка под ваш режим (график, цели, потребности).',
+        'Тем, кому нужен быстрый прогнозируемый результат и индивидуальная настройка заработка под ваш режим.',
       result:
-        'Выстроенная личная система заработка, выход на доход до ~200 000 ₽/мес и план масштабирования. Постоянная обратная связь и поддержка без срока.',
+        'Личная система, доход до ~200 000 ₽/мес и план масштабирования. Постоянная связь и поддержка.',
       time: 'График под вас, старт — по договорённости',
       price: '90 000 ₽. Доступна официальная рассрочка Сбербанка.',
     },
@@ -153,10 +156,10 @@ export default function CoursesPage() {
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
-                      disabled={locked}
+                      disabled={locked || !authReady}
                       onClick={() => openForm(key)}
                       className={`h-11 w-full rounded-xl font-semibold border
-                                  ${locked
+                                  ${locked || !authReady
                                     ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                                     : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                     >
@@ -179,37 +182,31 @@ export default function CoursesPage() {
                   <div>
                     <div className="font-semibold mb-1">Что внутри</div>
                     <ul className="list-disc pl-5 space-y-1 text-[14px]">
-                      {f.bullets.map((b, i) => (
-                        <li key={i}>{b}</li>
-                      ))}
+                      {f.bullets.map((b, i) => (<li key={i}>{b}</li>))}
                     </ul>
                   </div>
-
                   <div>
                     <div className="font-semibold mb-1">Для кого</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.audience}</p>
                   </div>
-
                   <div>
                     <div className="font-semibold mb-1">Результат</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.result}</p>
                   </div>
-
                   <div>
                     <div className="font-semibold mb-1">Время и требования</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.time}</p>
                   </div>
-
                   <div>
                     <div className="font-semibold mb-1">Цена</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.price}</p>
                   </div>
 
                   <button
-                    disabled={locked}
+                    disabled={locked || !authReady}
                     onClick={() => openForm(key)}
                     className={`mt-1 w-full h-11 rounded-xl font-semibold border
-                                ${locked
+                                ${locked || !authReady
                                   ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                                   : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                   >
@@ -227,66 +224,33 @@ export default function CoursesPage() {
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
 
-      {/* bottom sheet (если захочешь включать) */}
-      {sheet && (
-        <div className="fixed inset-0 z-[60]">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSheet(false)} />
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 w-full max-w-[var(--content-max)]
-                          rounded-t-2xl bg-[var(--surface)] border-t border-[var(--border)] p-4">
-            <div className="mx-auto h-1.5 w-12 rounded-full bg-[var(--border)] mb-3" />
-            <div className="text-lg font-bold mb-2">Сравнить форматы</div>
-
-            <div className="space-y-2 text-sm">
-              {[
-                ['Длительность', '1 неделя + 3 нед. поддержки', '4 созвона + сопровождение'],
-                ['Формат', 'Эфиры + задания', '1:1 созвоны'],
-                ['Материалы', 'Бот, чек-листы', 'Персональные связки'],
-                ['Поддержка', '3 недели', 'Бессрочно'],
-                ['Для кого', 'Старт с нуля', 'Быстрый рост'],
-                ['Результат', 'Первые сделки', 'Система + масштаб'],
-                ['Оплата', 'Разовая / рассрочка', 'Разовая / рассрочка'],
-              ].map((row, i) => (
-                <div
-                  key={i}
-                  className="grid grid-cols-1 gap-1 rounded-xl border border-[var(--border)] p-2
-                             min-[420px]:grid-cols-[1.05fr_.95fr_.95fr]"
-                >
-                  <div className="font-semibold">{row[0]}</div>
-                  <div className="text-[var(--muted)]">{row[1]}</div>
-                  <div className="text-[var(--muted)]">{row[2]}</div>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                className="h-11 rounded-xl bg-[var(--brand)] text-black font-semibold
-                           border border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]"
-                onClick={() => { setSheet(false); setFormOpen('group'); }}
-              >
-                Заявка на групповой курс
-              </button>
-              <button
-                className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold active:translate-y-[1px]"
-                onClick={() => { setSheet(false); setFormOpen('pro'); }}
-              >
-                Заявка на обучение 1:1
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* модалка «Оставить заявку» */}
       {formOpen && (
         <FormModal
           formatKey={formOpen}
           title={formats[formOpen].title}
           onClose={() => setFormOpen(null)}
-          locked={locked}
+          locked={locked || !authReady}
           tgName={tgUser?.name || ''}
           tgUsername={tgUser?.username || ''}
-          onSent={() => setFormOpen(null)}
+          onSubmit={async (payload) => {
+            const msg = [
+              `Формат: ${payload.format === 'group' ? 'Групповой' : 'Индивидуальный'}`,
+              payload.name ? `Имя: ${payload.name}` : null,
+              payload.handle ? `TG: ${payload.handle}` : null,
+              payload.phone ? `Телефон: ${payload.phone}` : null,
+              payload.start ? `Старт: ${payload.start}` : null,
+              payload.comment ? `Комментарий: ${payload.comment}` : null,
+            ].filter(Boolean).join('\n');
+
+            try {
+              await createLead({ lead_type: 'course', message: msg });
+              alert('✅ Заявка отправлена! Мы свяжемся в Telegram.');
+              setFormOpen(null);
+            } catch (e: any) {
+              alert('❌ Ошибка отправки: ' + String(e?.message || e));
+            }
+          }}
         />
       )}
     </main>
@@ -301,7 +265,15 @@ function FormModal(props: {
   tgName: string;
   tgUsername: string;
   onClose: () => void;
-  onSent: () => void;
+  onSubmit: (payload: {
+    format: FormatKey;
+    name: string;
+    handle: string;
+    phone: string;
+    start: 'now' | 'month' | 'unsure';
+    comment: string;
+    agree: boolean;
+  }) => Promise<void>;
 }) {
   const [name, setName] = useState(props.tgName);
   const [handle, setHandle] = useState(props.tgUsername);
@@ -309,35 +281,18 @@ function FormModal(props: {
   const [start, setStart] = useState<'now' | 'month' | 'unsure'>('now');
   const [comment, setComment] = useState('');
   const [agree, setAgree] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
 
-  async function submit(e: React.FormEvent) {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!agree || props.locked || loading) return;
-
-    const message =
-      [
-        `Формат: ${props.formatKey === 'group' ? 'Групповой' : 'PRO (1:1)'}`,
-        name ? `Имя: ${name}` : null,
-        handle ? `TG: ${handle}` : null,
-        phone ? `Телефон: ${phone}` : null,
-        `Старт: ${start === 'now' ? 'на этой неделе' : start === 'month' ? 'в течение месяца' : 'уточню'}`,
-        comment ? `Комментарий: ${comment}` : null,
-      ]
-        .filter(Boolean)
-        .join('\n');
-
+    if (!agree || props.locked || sending) return;
+    setSending(true);
     try {
-      setLoading(true);
-      await createLead({ lead_type: 'course', message });
-      alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
-      props.onSent();
-    } catch (e: any) {
-      alert('❌ Ошибка отправки: ' + String(e?.message || e));
-    } finally {
-      setLoading(false);
-    }
-  }
+      await props.onSubmit({
+        format: props.formatKey, name, handle, phone, start, comment, agree,
+      });
+    } finally { setSending(false); }
+  };
 
   return (
     <div className="fixed inset-0 z-[70]">
@@ -410,13 +365,13 @@ function FormModal(props: {
             </button>
             <button
               type="submit"
-              disabled={!agree || props.locked || loading}
+              disabled={!agree || props.locked || sending}
               className={`h-11 rounded-xl font-semibold border w-full
-                ${(!agree || props.locked)
+                ${(!agree || props.locked || sending)
                   ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                   : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
             >
-              {loading ? 'Отправляем…' : 'Отправить заявку'}
+              {sending ? 'Отправляем…' : 'Отправить заявку'}
             </button>
           </div>
 

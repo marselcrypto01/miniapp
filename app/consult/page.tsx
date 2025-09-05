@@ -1,9 +1,18 @@
+// app/consult/page.tsx
 'use client';
 
-import { useMemo, useState } from 'react';
-import { createLead } from '@/lib/db';
+import { useEffect, useMemo, useState } from 'react';
+import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
 export default function ConsultPage() {
+  const [authReady, setAuthReady] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try { await initSupabaseFromTelegram(); } finally { setAuthReady(true); }
+    })();
+  }, []);
+
   // автоподстановка из Telegram (если есть)
   const tgUser = useMemo(() => {
     try {
@@ -15,9 +24,7 @@ export default function ConsultPage() {
         name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
         username: u.username ? `@${u.username}` : '',
       };
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }, []);
 
   // форма
@@ -29,9 +36,8 @@ export default function ConsultPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
-    if (loading) return;
+    if (loading || !authReady) return;
 
-    // собираем человекочитаемое сообщение, которое уйдёт в колонку message
     const msg =
       [
         name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
@@ -39,15 +45,12 @@ export default function ConsultPage() {
         phone ? `Телефон: ${phone}` : null,
         time ? `Время: ${time}` : null,
         topic ? `Тема: ${topic}` : null,
-      ]
-        .filter(Boolean)
-        .join('\n') || 'Консультация';
+      ].filter(Boolean).join('\n') || 'Консультация';
 
     try {
       setLoading(true);
       await createLead({ lead_type: 'consult', message: msg });
       alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
-      // очистим только необязательные поля
       setPhone('');
       setTime('');
       setTopic('');
@@ -120,10 +123,10 @@ export default function ConsultPage() {
           <button
             className="btn-brand"
             onClick={handleSubmit}
-            disabled={loading}
-            title={loading ? 'Отправляем…' : 'Записаться'}
+            disabled={loading || !authReady}
+            title={!authReady ? 'Инициализация…' : (loading ? 'Отправляем…' : 'Записаться')}
           >
-            {loading ? 'Отправляем…' : 'Записаться'}
+            {!authReady ? 'Инициализация…' : (loading ? 'Отправляем…' : 'Записаться')}
           </button>
         </div>
       </div>

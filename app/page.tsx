@@ -1,502 +1,541 @@
-// app/admin/page.tsx
+// app/page.tsx
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
-import { createClient } from '@supabase/supabase-js';
-import { initSupabaseFromTelegram } from '@/lib/db';
+import {
+  listLessons,
+  getRandomDailyQuote,
+  getUserProgress,
+  saveUserProgress,
+  initSupabaseFromTelegram,
+} from '@/lib/db';
 
+type Progress = { lesson_id: number; status: 'completed' | 'pending' };
+type Lesson   = { id: number; title: string; subtitle?: string | null };
+type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
+type Env = 'loading' | 'telegram' | 'browser';
+
+const CORE_LESSONS_COUNT = 5;
+const POINTS_PER_LESSON = 100;
+
+/** ширина = мини-бару через переменную */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
-type TabKey = 'leads' | 'users' | 'settings';
+const ICONS: Record<number, string> = { 1: '🧠', 2: '🎯', 3: '🛡️', 4: '⚠️', 5: '🧭', 6: '📚' };
 
-/* ───────── Проверка админа ───────── */
-function useIsAdmin() {
-  const [st, setSt] = useState<{ loading: boolean; allowed: boolean; username?: string }>({
-    loading: true,
-    allowed: false,
+const QUOTES = [
+  'Учись видеть возможности там, где другие видят шум.',
+  'Успех любит дисциплину.',
+  'Лучший риск — тот, который просчитан.',
+  'Дорогу осилит идущий. Шаг за шагом.',
+  'Малые действия каждый день сильнее больших рывков раз в месяц.',
+];
+
+/* уровни */
+type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
+const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
+  novice:      { title: 'Новичок',      threshold: 0,   icon: '🌱' },
+  megagood:    { title: 'Мегахорош',    threshold: 40,  icon: '💪' },
+  almostpro:   { title: 'ПочтиПрофи',   threshold: 80,  icon: '⚡' },
+  arbitrager:  { title: 'Арбитражник',  threshold: 120, icon: '🎯' },
+  cryptoboss:  { title: 'Крипто-босс',  threshold: 160, icon: '👑' },
+};
+
+function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
+  let xp = completedCount * 20;
+  if (ach.first) xp += 5;
+  if (ach.unlock) xp += 5;
+  if (ach.fear) xp += 5;
+  if (ach.errors) xp += 10;
+  if (ach.arbitrager) xp += 25;
+  return xp;
+}
+function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progressPct: number } {
+  const order: LevelKey[] = ['novice', 'megagood', 'almostpro', 'arbitrager', 'cryptoboss'];
+  let current: LevelKey = 'novice';
+  for (const k of order) if (xp >= LEVELS[k].threshold) current = k;
+  const idx = order.indexOf(current);
+  const next = order[idx + 1];
+  if (!next) return { key: current, nextAt: null, progressPct: 100 };
+  const from = LEVELS[current].threshold;
+  const to   = LEVELS[next].threshold;
+  const pct  = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
+  return { key: current, nextAt: to, progressPct: pct };
+}
+
+/* uid общий — оставляем только для presence */
+const UID_KEY = 'presence_uid';
+function getClientUid(): string {
+  try {
+    const from = localStorage.getItem(UID_KEY);
+    if (from) return from;
+    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(UID_KEY, gen);
+    return gen;
+  } catch { return 'anonymous'; }
+}
+
+/* ───── NEW: user-scoped localStorage ───── */
+function getTgIdSync(): string | null {
+  try {
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch { return null; }
+}
+function ns(key: string): string {
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
+}
+
+export default function Home() {
+  const router = useRouter();
+
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const [env, setEnv] = useState<Env>('loading');
+
+  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [progress, setProgress] = useState<Progress[]>([]);
+  const [quote, setQuote] = useState<string>('');
+
+  const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
+    first: false, unlock: false, fear: false, errors: false, arbitrager: false
   });
+  const [allCompleted, setAllCompleted] = useState(false);
+  const [progressLoaded, setProgressLoaded] = useState(false);
 
+  /* Инициализируем Supabase (tg-auth) и страховочный редирект в /admin */
   useEffect(() => {
-    let off = false;
+    let stop = false;
+
+    initSupabaseFromTelegram().catch((e) => console.warn('auth init failed', e));
+
+    function wantAdmin() {
+      const sp = new URLSearchParams(window.location.search);
+      const s1 = (sp.get('startapp') || '').toLowerCase();
+      const s2 = (sp.get('tgWebAppStartParam') || '').toLowerCase();
+      let s3 = '';
+      if (location.hash.startsWith('#')) {
+        try { s3 = new URLSearchParams(location.hash.slice(1)).get('tgWebAppStartParam') || ''; } catch {}
+      }
+      return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
+    }
+
     (async () => {
-      try {
-        await initSupabaseFromTelegram().catch(() => {});
-        for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 80 && !stop; i++) {
+        try {
+          // @ts-ignore
           const wa = (window as any)?.Telegram?.WebApp;
-          if (wa) {
-            const u = wa?.initDataUnsafe?.user;
-            const name = u?.username?.toLowerCase?.();
-            const demo = new URLSearchParams(location.search).get('demoAdmin') === '1';
-            if (!off) setSt({ loading: false, allowed: name === 'marselv1' || demo, username: u?.username });
+          const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
+          const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
+          const asked     = wantAdmin() || startParm === 'admin';
+          if (username === 'marselv1' && asked) {
+            window.location.replace('/admin');
             return;
           }
-          await new Promise((r) => setTimeout(r, 100));
-        }
-      } catch {}
-      if (!off) setSt({ loading: false, allowed: false });
+        } catch {}
+        await new Promise(r => setTimeout(r, 100));
+      }
     })();
-    return () => {
-      off = true;
-    };
+
+    return () => { stop = true; };
   }, []);
 
-  return st;
-}
-
-/* ───────── Кнопка ───────── */
-function Btn({
-  children,
-  onClick,
-  disabled,
-  variant = 'ghost',
-  className = '',
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  variant?: 'brand' | 'ghost' | 'outline';
-  className?: string;
-}) {
-  const base =
-    'inline-flex h-10 px-3 items-center justify-center rounded-xl font-semibold border active:translate-y-[1px] disabled:opacity-50 disabled:active:translate-y-0 whitespace-nowrap';
-  const v =
-    variant === 'brand'
-      ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'
-      : variant === 'outline'
-      ? 'bg-transparent border-[var(--border)]'
-      : 'bg-[var(--surface-2)] border-[var(--border)]';
-  return (
-    <button onClick={onClick} disabled={disabled} className={`${base} ${v} ${className}`}>
-      {children}
-    </button>
+  /* вычисления */
+  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+  const completedCount = useMemo(
+    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    [progress]
   );
-}
+  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+  const points    = completedCount * POINTS_PER_LESSON;
 
-/* ───────── Лиды ───────── */
-type Lead = {
-  id: string;
-  created_at: string;
-  client_id: string | null;
-  username: string | null;
-  lead_type: 'consult' | 'course';
-  name: string | null;
-  handle: string | null;
-  phone: string | null;
-  comment: string | null;
-  message: string | null;
-  status: 'new' | 'in_progress' | 'done' | 'lost';
-};
+  const xp = computeXP(completedCount, achievements);
+  const { key: levelKey, progressPct } = computeLevel(xp);
+  const level = LEVELS[levelKey];
 
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-function getRlsClient() {
-  const tryKeys = ['sb_tg_auth_v2', 'sb_tg_auth_v1'];
-  let jwt: string | undefined;
-  for (const k of tryKeys) {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem(k) : null;
-    if (raw) {
-      try {
-        jwt = JSON.parse(raw)?.token as string | undefined;
-        if (jwt) break;
-      } catch {}
-    }
-  }
-  return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: jwt ? { headers: { Authorization: `Bearer ${jwt}` } } : undefined,
-  });
-}
+  const checkpoints = useMemo(
+    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
+    []
+  );
+  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-/* ───────── Вкладка «Лиды» (без изменений) ───────── */
-function LeadsTab() {
-  const [rows, setRows] = useState<Lead[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<'all' | Lead['status']>('all');
-
-  async function fetchLeads() {
-    setLoading(true);
-    try {
-      const sb = getRlsClient();
-      let query = sb
-        .from('leads')
-        .select('id,created_at,client_id,username,lead_type,name,handle,phone,comment,message,status')
-        .order('created_at', { ascending: false })
-        .limit(400);
-
-      if (status !== 'all') query = query.eq('status', status);
-
-      if (q.trim().length) {
-        const like = `%${q.trim()}%`;
-        query = query.or(
-          [
-            `username.ilike.${like}`,
-            `handle.ilike.${like}`,
-            `phone.ilike.${like}`,
-            `comment.ilike.${like}`,
-            `message.ilike.${like}`,
-            `client_id.ilike.${like}`,
-          ].join(','),
-        );
+  /* TG / demo (имя) */
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
+    let cancelled = false;
+    const detect = async () => {
+      for (let i = 0; i < 10; i++) {
+        const wa = (window as any)?.Telegram?.WebApp;
+        if (wa) {
+          try {
+            wa.ready(); wa.expand?.();
+            const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
+            if (!cancelled) {
+              if (hasInit || demo) {
+                setEnv('telegram');
+                const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
+                setFirstName(name);
+              } else setEnv('browser');
+            }
+            return;
+          } catch {}
+        }
+        await new Promise(r => setTimeout(r, 100));
       }
+      if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
+      if (demo) setFirstName('Друг');
+    };
+    void detect();
+    return () => { cancelled = true; };
+  }, []);
 
-      const { data, error } = await query;
-      if (error) throw error;
-      setRows((data ?? []) as Lead[]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
+  /* уроки */
   useEffect(() => {
-    fetchLeads();
-  }, []); // eslint-disable-line
-
-  const counts = useMemo(() => {
-    const by: Record<string, number> = { all: rows.length, new: 0, in_progress: 0, done: 0, lost: 0 };
-    rows.forEach((r) => (by[r.status] = (by[r.status] || 0) + 1));
-    return by as Record<'all' | Lead['status'], number>;
-  }, [rows]);
-
-  return (
-    <section className="space-y-3 w-full">
-      <div className="glass flex flex-wrap items-center gap-2 rounded-2xl p-2">
-        <div className="flex items-center gap-2">
-          <input
-            className="h-10 w-[280px] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
-            placeholder="Поиск: @ник, телефон, комментарий…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <Btn variant="brand" onClick={fetchLeads} disabled={loading}>
-            {loading ? 'Обновляю…' : 'Обновить'}
-          </Btn>
-        </div>
-
-        <div className="ml-auto flex flex-wrap gap-2">
-          {(['all', 'new', 'in_progress', 'done', 'lost'] as const).map((s) => (
-            <button
-              key={s}
-              onClick={() => setStatus(s)}
-              className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border ${
-                status === s
-                  ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'
-                  : 'bg-[var(--surface-2)] border-[var(--border)]'
-              }`}
-              title="Фильтр по статусу"
-            >
-              {s === 'all'
-                ? `Все · ${counts.all}`
-                : s === 'new'
-                ? `Новые · ${counts.new}`
-                : s === 'in_progress'
-                ? `В работе · ${counts.in_progress}`
-                : s === 'done'
-                ? `Сделка · ${counts.done}`
-                : `Потеря · ${counts.lost}`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="overflow-auto rounded-2xl border border-[var(--border)]">
-        <table className="min-w-[980px] w-full text-sm">
-          <thead className="bg-[var(--surface-2)]">
-            <tr className="[&>th]:text-left [&>th]:p-2">
-              <th>Дата</th>
-              <th>Тип</th>
-              <th>Юзернейм</th>
-              <th>Ник</th>
-              <th>Телефон</th>
-              <th>Имя</th>
-              <th>Комментарий</th>
-              <th>Message</th>
-              <th>Статус</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td className="p-3 text-center text-[var(--muted)]" colSpan={9}>
-                  Нет записей
-                </td>
-              </tr>
-            )}
-            {rows.map((r) => (
-              <tr key={r.id} className="border-t border-[var(--border)] align-top">
-                <td className="p-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
-                <td className="p-2">{r.lead_type === 'consult' ? 'Консультация' : 'Обучение'}</td>
-                <td className="p-2">{r.username ? `@${r.username}` : '—'}</td>
-                <td className="p-2">{r.handle || '—'}</td>
-                <td className="p-2">{r.phone || '—'}</td>
-                <td className="p-2">{r.name || '—'}</td>
-                <td className="p-2">{r.comment || '—'}</td>
-                <td className="p-2">{r.message || '—'}</td>
-                <td className="p-2">{r.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <p className="text-xs text-[var(--muted)]">* Доступ — из Telegram под админским @username.</p>
-    </section>
-  );
-}
-
-/* ───────── Users: читаем из БД presence_live ───────── */
-
-type PresenceRow = {
-  client_id: string | null;
-  username: string | null;
-  page: string | null;
-  activity: string | null;
-  lesson_id: number | null;
-  progress_pct: number | null;
-  updated_at: string;
-};
-
-function UsersTab() {
-  const [rows, setRows] = useState<PresenceRow[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const fetchPresence = async () => {
-    setLoading(true);
-    try {
-      const sb = getRlsClient();
-      // берем последние 24 часа, сортируем по времени (сверху самые свежие)
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const { data, error } = await sb
-        .from('presence_live')
-        .select('client_id, username, page, activity, lesson_id, progress_pct, updated_at')
-        .gte('updated_at', since)
-        .order('updated_at', { ascending: false })
-        .limit(2000);
-      if (error) throw error;
-
-      setRows((data ?? []) as PresenceRow[]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // первый загруз + авто-обновление раз в 10 сек
-  useEffect(() => {
-    fetchPresence();
-    const t = setInterval(fetchPresence, 10000);
-    return () => clearInterval(t);
-  }, []); // eslint-disable-line
-
-  // сгруппируем по client_id — берём самую свежую запись на клиента
-  const latest = useMemo(() => {
-    const map = new Map<string, PresenceRow>();
-    for (const r of rows) {
-      const key = r.client_id || 'unknown';
-      if (!map.has(key)) map.set(key, r);
-    }
-    return Array.from(map.values());
-  }, [rows]);
-
-  const onlineThresholdMs = 45000; // 45 сек
-  const onlineNow = latest.filter((r) => Date.now() - new Date(r.updated_at).getTime() < onlineThresholdMs).length;
-  const totalUnique = latest.length;
-
-  return (
-    <section className="space-y-4 w-full">
-      <div className="grid grid-cols-3 gap-3">
-        <div className="glass rounded-xl p-4">
-          <div className="text-sm text-[var(--muted)]">Всего уникальных</div>
-          <div className="text-2xl font-bold">{totalUnique}</div>
-        </div>
-        <div className="glass rounded-xl p-4">
-          <div className="text-sm text-[var(--muted)]">Сейчас онлайн</div>
-          <div className="text-2xl font-bold">{onlineNow}</div>
-        </div>
-        <div className="glass rounded-xl p-4">
-          <div className="text-sm text-[var(--muted)]">Записей за 24ч</div>
-          <div className="text-2xl font-bold">{rows.length}</div>
-        </div>
-      </div>
-
-      <div className="glass rounded-xl p-4 w-full">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="text-lg font-bold">Последние сессии (по пользователям)</div>
-          <Btn variant="brand" onClick={fetchPresence} disabled={loading}>
-            {loading ? 'Обновляю…' : 'Обновить'}
-          </Btn>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-[var(--muted)]">
-                <th className="px-2 py-2">User</th>
-                <th className="px-2 py-2">Страница</th>
-                <th className="px-2 py-2">Активность</th>
-                <th className="px-2 py-2">Урок</th>
-                <th className="px-2 py-2">Прогресс</th>
-                <th className="px-2 py-2">Онлайн</th>
-                <th className="px-2 py-2">Обновлено</th>
-              </tr>
-            </thead>
-            <tbody>
-              {latest.length === 0 && (
-                <tr>
-                  <td className="px-2 py-3 text-[var(--muted)]" colSpan={7}>
-                    Пусто
-                  </td>
-                </tr>
-              )}
-              {latest.map((s) => {
-                const isOnline = Date.now() - new Date(s.updated_at).getTime() < onlineThresholdMs;
-                return (
-                  <tr key={(s.client_id || 'unknown') + '-' + s.updated_at} className="border-t border-[var(--border)]">
-                    <td className="px-2 py-2">{s.username ? `@${s.username}` : (s.client_id || '—')}</td>
-                    <td className="px-2 py-2">{s.page || '—'}</td>
-                    <td className="px-2 py-2">{s.activity || '—'}</td>
-                    <td className="px-2 py-2">{s.lesson_id ?? '—'}</td>
-                    <td className="px-2 py-2">{s.progress_pct !== null ? `${s.progress_pct}%` : '—'}</td>
-                    <td className="px-2 py-2">{isOnline ? '🟢' : '⚪️'}</td>
-                    <td className="px-2 py-2">{new Date(s.updated_at).toLocaleTimeString()}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="mt-3 text-xs text-[var(--muted)]">* Источник: таблица <code>presence_live</code> в Supabase.</div>
-      </div>
-    </section>
-  );
-}
-
-/* ───────── Настройки (локально) ───────── */
-function SettingsEditor() {
-  const [quotes, setQuotes] = useState<string[]>([]);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('admin_quotes');
-      if (raw) {
-        const arr = JSON.parse(raw);
-        setQuotes(Array.isArray(arr) ? (arr as string[]) : []);
-      } else {
-        setQuotes([
-          'Учись видеть возможности там, где другие видят шум.',
-          'Успех любит дисциплину.',
-          'Лучший риск — тот, который просчитан.',
-          'Дорогу осилит идущий. Шаг за шагом.',
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listLessons();
+        if (cancelled) return;
+        const mapped: Lesson[] = rows
+          .sort((a: any, b: any) => (a.order_index ?? a.id) - (b.order_index ?? b.id))
+          .map((r: any) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
+        const names: Record<number, string> = {
+          1: 'Крипта без сложных слов: что это и зачем тебе',
+          2: 'Арбитраж: простой способ зарабатывать на обмене крипты',
+          3: 'Риски и страхи: как не потерять деньги на старте',
+          4: '5 ошибок новичков, которые убивают заработок',
+          5: 'Финал: твой первый шаг в мир крипты',
+        };
+        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
+        setLessons(patched);
+        try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
+      } catch {
+        setLessons([
+          { id: 1, title: 'Крипта без сложных слов: что это и зачем тебе' },
+          { id: 2, title: 'Арбитраж: простой способ зарабатывать на обмене крипты' },
+          { id: 3, title: 'Риски и страхи: как не потерять деньги на старте' },
+          { id: 4, title: '5 ошибок новичков, которые убивают заработок' },
+          { id: 5, title: 'Финал: твой первый шаг в мир крипты' },
+          { id: 6, title: 'Дополнительные материалы', subtitle: 'Секретный чек-лист банков и бирж' },
         ]);
       }
-    } catch {
-      setQuotes([]);
-    }
+    })();
+    return () => { cancelled = true; };
   }, []);
-  const add = () => setQuotes((q) => [...q, 'Новая цитата…']);
-  const patch = (i: number, v: string) => setQuotes((q) => q.map((x, idx) => (idx === i ? v : x)));
-  const del = (i: number) => setQuotes((q) => q.filter((_, idx) => idx !== i));
-  const save = () => {
-    try {
-      localStorage.setItem('admin_quotes', JSON.stringify(quotes));
-      alert('✅ Цитаты сохранены');
-    } catch {}
+
+  /* цитата */
+  useEffect(() => {
+    (async () => {
+      try {
+        const q = await getRandomDailyQuote();
+        if (q) { setQuote(q); return; }
+      } catch {}
+      try {
+        const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
+        const pool: string[] = Array.isArray(saved) && saved.length ? saved : QUOTES;
+        setQuote(pool[Math.floor(Math.random() * pool.length)]);
+      } catch {
+        setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+      }
+    })();
+  }, []);
+
+  /* прогресс (БЕЗ uid — RLS сам ограничит) */
+  useEffect(() => {
+    (async () => {
+      try {
+        const rows = await getUserProgress();
+        if (rows?.length) {
+          const arr: Progress[] = rows.map((r: any) => ({
+            lesson_id: Number(r.lesson_id),
+            status: r.status === 'completed' ? 'completed' : 'pending',
+          }));
+          setProgress(arr);
+          try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
+        } else {
+          const raw = localStorage.getItem(ns('progress'));
+          if (raw) setProgress(JSON.parse(raw) as Progress[]);
+        }
+      } catch {
+        const raw = localStorage.getItem(ns('progress'));
+        if (raw) setProgress(JSON.parse(raw) as Progress[]);
+      }
+
+      try {
+        const ach = localStorage.getItem(ns('achievements'));
+        const all = localStorage.getItem(ns('all_completed')) === 'true';
+        if (ach) setAchievements(JSON.parse(ach));
+        setAllCompleted(all);
+      } catch {}
+
+      setProgressLoaded(true);
+    })();
+  }, []);
+
+  /* авто-обновление при возврате */
+  useEffect(() => {
+    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
+    window.addEventListener('focus', refresh);
+    const onVis = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+  }, []);
+
+  /* сохраняем и считаем ачивки */
+  useEffect(() => {
+    if (!progressLoaded) return;
+    const next = { ...achievements };
+    const _isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+    if (_isCompleted(1)) next.first = true;
+    if (_isCompleted(2)) next.unlock = true;
+    if (_isCompleted(3)) next.fear = true;
+    if (_isCompleted(4)) next.errors = true;
+    const finishedCount = progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
+    if (finishedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
+
+    setAchievements(next);
+    try { localStorage.setItem(ns('achievements'), JSON.stringify(next)); } catch {}
+
+    const finished = finishedCount === CORE_LESSONS_COUNT;
+    setAllCompleted(finished);
+    try { localStorage.setItem(ns('all_completed'), finished ? 'true' : 'false'); } catch {}
+
+    try { localStorage.setItem(ns('progress'), JSON.stringify(progress)); } catch {}
+    (async () => { try { await saveUserProgress(progress); } catch {} })();
+  }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* компактная «рамка» уровня */
+  const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
+    const clamped = Math.max(0, Math.min(100, pct));
+    return (
+      <div
+        className="rounded-full p-[1px] w-full"
+        style={{
+          border: '1px solid transparent',
+          background: `
+            linear-gradient(var(--surface), var(--surface)) padding-box,
+            linear-gradient(to top, var(--brand) ${clamped}%, rgba(255,255,255,0.08) 0) border-box
+          `,
+          boxShadow: 'var(--shadow)',
+        }}
+      >
+        <div
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full"
+          style={{ background: 'color-mix(in oklab, var(--surface) 85%, transparent)' }}
+        >
+          {children}
+        </div>
+      </div>
+    );
   };
 
-  return (
-    <section className="space-y-4 w-full">
-      <div className="flex items-center gap-2">
-        <Btn variant="brand" onClick={save}>
-          💾 Сохранить
-        </Btn>
-        <Btn onClick={add}>➕ Добавить</Btn>
-      </div>
-      <div className="grid gap-3">
-        {quotes.map((q, i) => (
-          <div key={i} className="glass rounded-xl p-3">
-            <div className="mb-1 text-xs text-[var(--muted)]">#{i + 1}</div>
-            <div className="flex items-center gap-2">
-              <input
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-                value={q}
-                onChange={(e) => patch(i, e.target.value)}
-              />
-              <Btn onClick={() => del(i)}>🗑️</Btn>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-/* ───────── Страница админки ───────── */
-export default function AdminPage() {
-  const { loading, allowed, username } = useIsAdmin();
-  const [tab, setTab] = useState<TabKey>('users');
-
-  if (loading) return null;
-  if (!allowed) {
+  if (env === 'loading') return null;
+  if (env === 'browser') {
     return (
-      <main className={`${WRAP} py-10`}>
-        <PresenceClient page="admin" activity="Админ-панель (нет доступа)" />
-        <div className="glass rounded-2xl p-6 text-center">
-          <div className="text-3xl">🔒</div>
-          <h1 className="text-xl font-bold mt-1">Доступ запрещён</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">
-            Только для <b>@marselv1</b>. {username ? <>Вы: <b>@{username}</b></> : null}
-          </p>
+      <main className={`flex h-screen items-center justify-center ${WRAP}`}>
+        <div className="glass p-6 text-center w-full">
+          <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className={`${WRAP} pt-5 pb-28`} style={{ overflowX: 'hidden' }}>
-      <PresenceClient page="admin" activity="Админ-панель" />
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold tracking-tight">Админ-панель</h1>
-        <a
-          href="/"
-          className="inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border border-[var(--border)] bg-[var(--surface-2)]"
+    <main className={`${WRAP} py-4`}>
+      <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
+
+      {/* Шапка */}
+      <header className="mb-5 w-full">
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
+        <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
+
+        <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
+
+        <blockquote
+          className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"
+          style={{ boxShadow: 'var(--shadow)', borderLeftWidth: '4px', borderLeftColor: 'var(--brand)', background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)' }}
         >
-          ← На главную
-        </a>
-      </header>
+          <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
+        </blockquote>
 
-      {tab === 'leads' && <LeadsTab />}
-      {tab === 'users' && <UsersTab />}
-      {tab === 'settings' && <SettingsEditor />}
+        {/* очки + уровень */}
+        <div className="mt-3 grid grid-cols-2 gap-2 w-full">
+          <div className="w-full">
+            <div className="chip px-3 py-1.5 w-full justify-center text-xs">
+              <span>🏆</span><span className="font-semibold">{points} очк.</span>
+            </div>
+          </div>
+          <ChipRing pct={progressPct}>
+            <span className="text-sm">{level.icon}</span>
+            <span className="text-xs font-semibold">{level.title}</span>
+          </ChipRing>
+        </div>
 
-      {/* Нижний таб-бар */}
-      <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
-        <div className={`${WRAP}`}>
-          <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
-            <button
-              onClick={() => setTab('leads')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              📥 Лиды
-            </button>
-            <button
-              onClick={() => setTab('users')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              👥 Пользователи
-            </button>
-            <button
-              onClick={() => setTab('settings')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              ⚙️ Настройки
-            </button>
+        {/* прогресс-бар */}
+        <div className="mt-2 w-full">
+          <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden w-full">
+            <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
+            {checkpoints.map((p, i) => (
+              <div key={i} className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]" style={{ left: `calc(${p}% - 4px)` }} />
+            ))}
+          </div>
+          {/* вернул прежний мелкий шрифт (11px) */}
+          <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
+            <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
+            <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
           </div>
         </div>
-      </nav>
+
+        {/* Ачивки */}
+        <div className="mt-3 grid grid-cols-2 gap-2 w-full">
+          {[
+            { key: 'first' as const, icon: '👣', label: 'Первый шаг' },
+            { key: 'unlock' as const, icon: '🔓', label: 'Разблокировал знания' },
+            { key: 'fear' as const, icon: '🛡️', label: 'Победил страхи' },
+            { key: 'errors' as const, icon: '✅', label: 'Ошибки повержены' },
+            { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
+          ].map(a => {
+            const active = achievements[a.key];
+            return (
+              <div key={a.key} className="w-full">
+                <div
+                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-9 ${active ? '' : 'opacity-55'}`}
+                  style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
+                >
+                  <span className="text-sm shrink-0">{a.icon}</span>
+                  <span
+                    className="font-medium text-center leading-[1.1] break-words overflow-hidden
+                               [font-size:clamp(12px,3.1vw,14px)]"
+                    style={{ display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical' }}
+                  >
+                    {a.label}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </header>
+
+      {/* Уроки */}
+      <section className="w-full">
+        <h2 className="text-xl font-bold mb-2">Уроки</h2>
+        <div className="space-y-3 w-full">
+          {coreLessons.map((l, idx) => {
+            const done = isCompleted(l.id);
+            const mins = ({1:7,2:9,3:8,4:6,5:10} as Record<number, number>)[l.id] ?? 6;
+            return (
+              <div key={l.id} className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]">
+                <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
+                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">{ICONS[l.id] ?? '📘'}</div>
+                  <div className="min-w-0 w-full">
+                    <div className="text-[17px] font-semibold leading-tight break-words">Урок {idx + 1}. {l.title}</div>
+                    <div className="text-[13px] text-[var(--muted)] mt-1">{mins} мин • Статус: {done ? 'пройден' : 'не начат'}</div>
+                    <button
+                      className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                      onClick={() => router.push(`/lesson/${l.id}`)}
+                    >
+                      Смотреть
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Бонус */}
+        <h3 className="text-lg font-semibold mt-6">Бонус</h3>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
+
+        <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
+          <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
+            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">📚</div>
+            <div className="w-full">
+              <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
+              <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
+              <button
+                className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+                onClick={() => allCompleted && router.push('/lesson/6')}
+                disabled={!allCompleted}
+                title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}
+              >
+                {allCompleted ? 'Открыть' : 'Откроется после курса'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ — вернул полностью */}
+      <section className="w-full mt-6">
+        <h2 className="text-xl font-bold mb-3">📌 FAQ</h2>
+
+        <div className="space-y-2">
+          {[
+            [
+              '1. А если у меня всего 10–20 тысяч — это вообще имеет смысл?',
+              '👉 Да. Даже с минимальной суммой можно увидеть результат. Рекомендую начинать от 20 тысяч рублей — это комфортный старт, при котором уже будет ощутимый доход. Главное — понять механику, а дальше всё масштабируется.',
+            ],
+            [
+              '2. Не поздно ли заходить в крипту в 2025 году?',
+              '👉 Нет. Крипторынок продолжает расти, миллионы людей подключаются каждый год. Арбитраж работает, пока есть разница курсов и люди меняют валюту — а это всегда.',
+            ],
+            [
+              '3. Правда, что можно уйти в минус и потерять все деньги?',
+              '👉 Уйти в минус невозможно. Все сделки проходят через официальные биржи с эскроу: вы покупаете дешевле и продаёте дороже. Риск только в банальной невнимательности — например, ошибиться в номере карты при переводе. Поэтому при аккуратности рисков нет.',
+            ],
+            [
+              '4. Сколько реально можно заработать в месяц новичку?',
+              '👉 Новички обычно делают 50–80 тыс. рублей при капитале 50–100 тыс. рублей. Доходность в арбитраже может быть от 7% к капиталу в день, если правильно подходить. Всё зависит от дисциплины и вовлечённости.',
+            ],
+            [
+              '5. Что если банк начнёт задавать вопросы?',
+              '👉 Для этого есть готовые сценарии ответов и лимиты по суммам. Банки не запрещают арбитраж, главное — не гнать миллионы через одну карту. Соблюдая простые правила, проблем не будет.',
+            ],
+            [
+              '6. Я работаю/учусь. Сколько времени нужно тратить на арбитраж?',
+              '👉 Достаточно 1–2 часов в день. Этого хватает, чтобы делать сделки и зарабатывать. Арбитраж легко совмещать с работой или учёбой.',
+            ],
+            [
+              '7. А вдруг я не разберусь? Это не слишком сложно?',
+              '👉 Всё подаётся пошагово. Есть калькулятор, чек-листы и инструкции. Даже полный новичок быстро включается: сначала немного непривычно, но потом процесс становится простым и понятным.',
+            ],
+            [
+              '8. Чем арбитраж лучше инвестиций в монеты или трейдинга?',
+              '👉 В трейдинге и инвестициях доход зависит от угадываний и долгосрочных колебаний. В арбитраже доход системный: купил дешевле — продал дороже. Ты зарабатываешь сразу, а не ждёшь месяцами.',
+            ],
+            [
+              '9. Нужно ли показывать доход налоговой или бояться блокировок?',
+              '👉 Налогового регулирования для P2P-арбитража нет. Мы ничем противозаконным не занимаемся. На старте суммы небольшие, банки к ним не придираются.',
+            ],
+            [
+              '10. А если у меня нет подходящей карты/банка?',
+              '👉 Есть подборка лучших банков и платёжных систем — ты получишь её в бонусных материалах после прохождения курса.',
+            ],
+            [
+              '11. А если курс закроют или крипту запретят?',
+              '👉 Запретить обмен полностью невозможно. Даже если один банк ужесточит правила, есть десятки других вариантов и международные платформы.',
+            ],
+            [
+              '12. Нужно ли сидеть за компьютером весь день?',
+              '👉 Нет. Все сделки удобно делать с телефона — буквально несколько кликов, и сделка завершена.',
+            ],
+          ].map(([q, a], i) => (
+            <details key={i} className="glass rounded-2xl p-3 w-full">
+              <summary className="cursor-pointer font-semibold">{q}</summary>
+              <p className="mt-2 text-sm text-[var(--muted)]">{a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
     </main>
   );
 }

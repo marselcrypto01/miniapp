@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { createLead } from '@/lib/db';
 
 export default function ConsultPage() {
   // автоподстановка из Telegram (если есть)
@@ -25,20 +26,37 @@ export default function ConsultPage() {
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
-    const payload = {
-      name: name || tgUser?.name || '',
-      tg: tgNick || tgUser?.username || '',
-      phone,
-      time,
-      topic,
-    };
-    const data = encodeURIComponent(JSON.stringify(payload));
-    // ЗАМЕНИ your_bot на реальный username бота
-    const url = `https://t.me/your_bot?start=consult_${data}`;
-    window.open(url, '_blank');
-  };
+  async function handleSubmit() {
+    if (loading) return;
+
+    // собираем человекочитаемое сообщение, которое уйдёт в колонку message
+    const msg =
+      [
+        name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
+        tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
+        phone ? `Телефон: ${phone}` : null,
+        time ? `Время: ${time}` : null,
+        topic ? `Тема: ${topic}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n') || 'Консультация';
+
+    try {
+      setLoading(true);
+      await createLead({ lead_type: 'consult', message: msg });
+      alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
+      // очистим только необязательные поля
+      setPhone('');
+      setTime('');
+      setTopic('');
+    } catch (e: any) {
+      alert('❌ Ошибка отправки: ' + String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-[var(--content-max)] px-4 py-5">
@@ -93,14 +111,19 @@ export default function ConsultPage() {
               value={topic}
               onChange={e => setTopic(e.target.value)}
               className="min-h-[84px] rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none resize-y"
-              placeholder="Коротко напишите тему или о чём хотите поговорить (цели, вопросы, опыт, банки и т.п.)"
+              placeholder="Коротко опишите тему (цели, вопросы, опыт, банки и т.п.)"
             />
           </label>
         </div>
 
         <div className="mt-4">
-          <button className="btn-brand" onClick={handleSubmit}>
-            Записаться
+          <button
+            className="btn-brand"
+            onClick={handleSubmit}
+            disabled={loading}
+            title={loading ? 'Отправляем…' : 'Записаться'}
+          >
+            {loading ? 'Отправляем…' : 'Записаться'}
           </button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { createLead } from '@/lib/db';
 
 /** ширина = как у мини-бара через переменную в globals.css */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
@@ -28,7 +29,7 @@ export default function CoursesPage() {
   /* аккордеоны */
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
 
-  /* bottom sheet и модалка заявки (sheet можно включить кнопкой, если нужна) */
+  /* bottom sheet и модалка заявки */
   const [sheet, setSheet] = useState(false);
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
@@ -46,7 +47,7 @@ export default function CoursesPage() {
     } catch { return null; }
   }, []);
 
-  /* тексты форматов по ТЗ */
+  /* тексты форматов */
   const formats: Record<FormatKey, {
     title: string;
     emoji: string;
@@ -131,17 +132,14 @@ export default function CoursesPage() {
               key={key}
               className={`card w-full space-y-3 rounded-2xl ${expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''}`}
             >
-              {/* Верхняя часть: иконка + заголовок + тизер + чипы + две кнопки */}
+              {/* Верхняя часть */}
               <div className="grid grid-cols-[40px_1fr] gap-3">
-                {/* Иконка — строго 40×40 */}
                 <div className="w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[18px] leading-none">
                   {f.emoji}
                 </div>
 
                 <div className="min-w-0">
                   <h3 className="text-[18px] font-semibold leading-tight">{f.title}</h3>
-
-                  {/* тизер — clamp до 2 строк */}
                   <p
                     className="mt-1 text-[14px] text-[var(--muted)] leading-snug overflow-hidden"
                     style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
@@ -149,12 +147,10 @@ export default function CoursesPage() {
                     {f.teaser}
                   </p>
 
-                  {/* ЧИПЫ: всегда видны → перенос по строкам */}
                   <div className="mt-2 flex gap-2 flex-wrap">
                     {f.chips.map((c, i) => <Chip key={i}>{c}</Chip>)}
                   </div>
 
-                  {/* две равные кнопки */}
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       disabled={locked}
@@ -180,7 +176,6 @@ export default function CoursesPage() {
               {/* Развёрнутый контент */}
               {expanded && (
                 <div className="pt-3 border-t border-[var(--border)] space-y-3">
-                  {/* Что внутри */}
                   <div>
                     <div className="font-semibold mb-1">Что внутри</div>
                     <ul className="list-disc pl-5 space-y-1 text-[14px]">
@@ -190,31 +185,26 @@ export default function CoursesPage() {
                     </ul>
                   </div>
 
-                  {/* Для кого */}
                   <div>
                     <div className="font-semibold mb-1">Для кого</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.audience}</p>
                   </div>
 
-                  {/* Результат */}
                   <div>
                     <div className="font-semibold mb-1">Результат</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.result}</p>
                   </div>
 
-                  {/* Время и требования */}
                   <div>
                     <div className="font-semibold mb-1">Время и требования</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.time}</p>
                   </div>
 
-                  {/* Цена */}
                   <div>
                     <div className="font-semibold mb-1">Цена</div>
                     <p className="text-[14px] text-[var(--muted)]">{f.price}</p>
                   </div>
 
-                  {/* большой CTA */}
                   <button
                     disabled={locked}
                     onClick={() => openForm(key)}
@@ -237,7 +227,7 @@ export default function CoursesPage() {
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
 
-      {/* bottom sheet (оставлен как в предыдущей версии; отображается, если setSheet(true)) */}
+      {/* bottom sheet (если захочешь включать) */}
       {sheet && (
         <div className="fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSheet(false)} />
@@ -296,12 +286,7 @@ export default function CoursesPage() {
           locked={locked}
           tgName={tgUser?.name || ''}
           tgUsername={tgUser?.username || ''}
-          onSubmit={(payload) => {
-            // TODO: отправка в твоего бота/вебхук
-            console.log('REQUEST:', payload);
-            alert('Заявка отправлена ✨ Мы свяжемся в Telegram.');
-            setFormOpen(null);
-          }}
+          onSent={() => setFormOpen(null)}
         />
       )}
     </main>
@@ -316,15 +301,7 @@ function FormModal(props: {
   tgName: string;
   tgUsername: string;
   onClose: () => void;
-  onSubmit: (payload: {
-    format: FormatKey;
-    name: string;
-    handle: string;
-    phone: string;
-    start: 'now' | 'month' | 'unsure';
-    comment: string;
-    agree: boolean;
-  }) => void;
+  onSent: () => void;
 }) {
   const [name, setName] = useState(props.tgName);
   const [handle, setHandle] = useState(props.tgUsername);
@@ -332,15 +309,35 @@ function FormModal(props: {
   const [start, setStart] = useState<'now' | 'month' | 'unsure'>('now');
   const [comment, setComment] = useState('');
   const [agree, setAgree] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!agree || props.locked) return;
-    props.onSubmit({
-      format: props.formatKey,
-      name, handle, phone, start, comment, agree,
-    });
-  };
+    if (!agree || props.locked || loading) return;
+
+    const message =
+      [
+        `Формат: ${props.formatKey === 'group' ? 'Групповой' : 'PRO (1:1)'}`,
+        name ? `Имя: ${name}` : null,
+        handle ? `TG: ${handle}` : null,
+        phone ? `Телефон: ${phone}` : null,
+        `Старт: ${start === 'now' ? 'на этой неделе' : start === 'month' ? 'в течение месяца' : 'уточню'}`,
+        comment ? `Комментарий: ${comment}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+    try {
+      setLoading(true);
+      await createLead({ lead_type: 'course', message });
+      alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
+      props.onSent();
+    } catch (e: any) {
+      alert('❌ Ошибка отправки: ' + String(e?.message || e));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-[70]">
@@ -413,13 +410,13 @@ function FormModal(props: {
             </button>
             <button
               type="submit"
-              disabled={!agree || props.locked}
+              disabled={!agree || props.locked || loading}
               className={`h-11 rounded-xl font-semibold border w-full
                 ${(!agree || props.locked)
                   ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
                   : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
             >
-              Отправить заявку
+              {loading ? 'Отправляем…' : 'Отправить заявку'}
             </button>
           </div>
 

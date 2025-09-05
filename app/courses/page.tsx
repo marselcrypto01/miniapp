@@ -17,12 +17,16 @@ const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 export default function CoursesPage() {
-  // Инициализация (не нужна для отправки заявки, но пусть будет для прочего)
-  useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
+  // Инициируем (на всякий случай)
+  useEffect(() => {
+    initSupabaseFromTelegram().catch(() => {});
+  }, []);
 
   const [locked, setLocked] = useState(true);
   useEffect(() => {
-    try { setLocked(!(localStorage.getItem('all_completed') === 'true')); } catch {}
+    try {
+      setLocked(!(localStorage.getItem('all_completed') === 'true'));
+    } catch {}
   }, []);
 
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
@@ -37,18 +41,31 @@ export default function CoursesPage() {
         name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
         username: u.username ? `@${u.username}` : '',
       };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, []);
 
-  const formats: Record<FormatKey, {
-    title: string; emoji: string; teaser: string; chips: string[];
-    bullets: string[]; audience: string; result: string; time: string;
-    price: string; ctaNote?: string;
-  }> = {
+  const formats: Record<
+    FormatKey,
+    {
+      title: string;
+      emoji: string;
+      teaser: string;
+      chips: string[];
+      bullets: string[];
+      audience: string;
+      result: string;
+      time: string;
+      price: string;
+      ctaNote?: string;
+    }
+  > = {
     group: {
       title: 'Групповой курс: Аренда за Крипту',
       emoji: '🧑‍🤝‍🧑',
-      teaser: '1 неделя эфиров + практика. Результат: доход от ~70 000 ₽/мес при стабильной работе.',
+      teaser:
+        '1 неделя эфиров + практика. Результат: доход от ~70 000 ₽/мес при стабильной работе.',
       chips: ['⏱ 1 неделя', '🧑‍🤝‍🧑 Группа+чат', '🤝 Поддержка 3 нед.'],
       bullets: [
         '5 эфиров (пн–пт) + 2 практических дня',
@@ -65,7 +82,8 @@ export default function CoursesPage() {
     pro: {
       title: 'Индивидуальное обучение: КриптоМарс PRO',
       emoji: '💼',
-      teaser: 'Личное обучение. Быстрый старт, доход со 2-го дня и бессрочная поддержка.',
+      teaser:
+        'Личное обучение. Быстрый старт, доход со 2-го дня и бессрочная поддержка.',
       chips: ['🎯 1:1 созвоны', '🧩 Личные связки', '♾ Поддержка'],
       bullets: [
         'Стратегия под цели',
@@ -88,7 +106,9 @@ export default function CoursesPage() {
   return (
     <main className={`${WRAP} py-4`}>
       <header className="mb-3 w-full">
-        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Следующий шаг</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">
+          Следующий шаг
+        </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Два формата обучения. Коротко — в карточках, детали — по «Подробнее».
         </p>
@@ -102,7 +122,9 @@ export default function CoursesPage() {
           return (
             <article
               key={key}
-              className={`card w-full space-y-3 rounded-2xl ${expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''}`}
+              className={`card w-full space-y-3 rounded-2xl ${
+                expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''
+              }`}
             >
               <div className="grid grid-cols-[40px_1fr] gap-3">
                 <div className="w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[18px] leading-none">
@@ -110,31 +132,44 @@ export default function CoursesPage() {
                 </div>
 
                 <div className="min-w-0">
-                  <h3 className="text-[18px] font-semibold leading-tight">{f.title}</h3>
+                  <h3 className="text-[18px] font-semibold leading-tight">
+                    {f.title}
+                  </h3>
                   <p
                     className="mt-1 text-[14px] text-[var(--muted)] leading-snug overflow-hidden"
-                    style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
+                    style={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                    }}
                   >
                     {f.teaser}
                   </p>
 
                   <div className="mt-2 flex gap-2 flex-wrap">
-                    {f.chips.map((c, i) => <Chip key={i}>{c}</Chip>)}
+                    {f.chips.map((c, i) => (
+                      <Chip key={i}>{c}</Chip>
+                    ))}
                   </div>
 
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       disabled={locked}
                       onClick={() => openForm(key)}
-                      className={`h-11 w-full rounded-xl font-semibold border
-                        ${locked
-                          ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                          : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
+                      className={`inline-flex h-11 w-full items-center justify-center rounded-xl font-semibold border
+                        ${
+                          locked
+                            ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                            : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'
+                        }`}
                     >
                       {locked ? 'После курса' : 'Заявка'}
                     </button>
                     <button
-                      onClick={() => setOpen((s) => ({ ...s, [key]: !expanded }))} className="h-11 w-full rounded-xl font-semibold border border-[var(--border)]
+                      onClick={() =>
+                        setOpen((s) => ({ ...s, [key]: !expanded }))
+                      }
+                      className="inline-flex h-11 w-full items-center justify-center rounded-xl font-semibold border border-[var(--border)]
                                  bg-[var(--surface)] active:translate-y-[1px]"
                     >
                       {expanded ? 'Свернуть' : 'Подробнее'}
@@ -148,16 +183,22 @@ export default function CoursesPage() {
                   <div>
                     <div className="font-semibold mb-1">Что внутри</div>
                     <ul className="list-disc pl-5 space-y-1 text-[14px]">
-                      {f.bullets.map((b, i) => (<li key={i}>{b}</li>))}
+                      {f.bullets.map((b, i) => (
+                        <li key={i}>{b}</li>
+                      ))}
                     </ul>
                   </div>
                   <div>
                     <div className="font-semibold mb-1">Для кого</div>
-                    <p className="text-[14px] text-[var(--muted)]">{f.audience}</p>
+                    <p className="text-[14px] text-[var(--muted)]">
+                      {f.audience}
+                    </p>
                   </div>
                   <div>
                     <div className="font-semibold mb-1">Результат</div>
-                    <p className="text-[14px] text-[var(--muted)]">{f.result}</p>
+                    <p className="text-[14px] text-[var(--muted)]">
+                      {f.result}
+                    </p>
                   </div>
                   <div>
                     <div className="font-semibold mb-1">Время и требования</div>
@@ -171,10 +212,12 @@ export default function CoursesPage() {
                   <button
                     disabled={locked}
                     onClick={() => openForm(key)}
-                    className={`mt-1 w-full h-11 rounded-xl font-semibold border
-                      ${locked
-                        ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                        : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
+                    className={`inline-flex mt-1 h-11 w-full items-center justify-center rounded-xl font-semibold border
+                      ${
+                        locked
+                          ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                          : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'
+                      }`}
                   >
                     {locked ? 'После курса' : 'Оставить заявку'}
                   </button>
@@ -185,7 +228,9 @@ export default function CoursesPage() {
         })}
       </section>
 
-      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
+      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">
+        @your_bot
+      </p>
 
       {formOpen && (
         <FormModal
@@ -197,13 +242,17 @@ export default function CoursesPage() {
           tgUsername={tgUser?.username || ''}
           onSubmit={async (payload) => {
             const msg = [
-              `Формат: ${payload.format === 'group' ? 'Групповой' : 'Индивидуальный'}`,
+              `Формат: ${
+                payload.format === 'group' ? 'Групповой' : 'Индивидуальный'
+              }`,
               payload.name ? `Имя: ${payload.name}` : null,
               payload.handle ? `TG: ${payload.handle}` : null,
               payload.phone ? `Телефон: ${payload.phone}` : null,
               payload.start ? `Старт: ${payload.start}` : null,
               payload.comment ? `Комментарий: ${payload.comment}` : null,
-            ].filter(Boolean).join('\n');
+            ]
+              .filter(Boolean)
+              .join('\n');
 
             try {
               await createLead({
@@ -211,7 +260,9 @@ export default function CoursesPage() {
                 name: payload.name || undefined,
                 handle: payload.handle || undefined,
                 phone: payload.phone || undefined,
-                comment: [`Старт: ${payload.start}`, payload.comment].filter(Boolean).join(' | '),
+                comment: [`Старт: ${payload.start}`, payload.comment]
+                  .filter(Boolean)
+                  .join(' | '),
                 message: msg,
               });
               alert('✅ Заявка отправлена! Мы свяжемся в Telegram.');
@@ -227,19 +278,28 @@ export default function CoursesPage() {
 }
 
 function FormModal(props: {
-  formatKey: FormatKey; title: string; locked: boolean;
-  tgName: string; tgUsername: string; onClose: () => void;
+  formatKey: FormatKey;
+  title: string;
+  locked: boolean;
+  tgName: string;
+  tgUsername: string;
+  onClose: () => void;
   onSubmit: (payload: {
-    format: FormatKey; name: string; handle: string; phone: string;
-    start: 'now'|'month'|'unsure'; comment: string; agree: boolean;
+    format: FormatKey;
+    name: string;
+    handle: string;
+    phone: string;
+    start: 'now' | 'month' | 'unsure';
+    comment: string;
+    agree: boolean;
   }) => Promise<void>;
 }) {
-  const [name, setName]       = useState(props.tgName);
-  const [handle, setHandle]   = useState(props.tgUsername);
-  const [phone, setPhone]     = useState('');
-  const [start, setStart]     = useState<'now'|'month'|'unsure'>('now');
+  const [name, setName] = useState(props.tgName);
+  const [handle, setHandle] = useState(props.tgUsername);
+  const [phone, setPhone] = useState('');
+  const [start, setStart] = useState<'now' | 'month' | 'unsure'>('now');
   const [comment, setComment] = useState('');
-  const [agree, setAgree]     = useState(false);
+  const [agree, setAgree] = useState(false);
   const [sending, setSending] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -247,8 +307,18 @@ function FormModal(props: {
     if (!agree || props.locked || sending) return;
     setSending(true);
     try {
-      await props.onSubmit({ format: props.formatKey, name, handle, phone, start, comment, agree });
-    } finally { setSending(false); }
+      await props.onSubmit({
+        format: props.formatKey,
+        name,
+        handle,
+        phone,
+        start,
+        comment,
+        agree,
+      });
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -262,26 +332,43 @@ function FormModal(props: {
         <form className="mt-3 space-y-2" onSubmit={submit}>
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Имя</label>
-            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-                   value={name} onChange={e=>setName(e.target.value)} placeholder="Как к вам обращаться" />
+            <input
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Как к вам обращаться"
+            />
           </div>
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Ник/телеграм</label>
-            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-                   value={handle} onChange={e=>setHandle(e.target.value)} placeholder="@username" />
+            <input
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+              placeholder="@username"
+            />
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-[var(--muted)]">Телефон (опционально)</label>
-            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-                   value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7…" />
+            <label className="text-xs text-[var(--muted)]">
+              Телефон (опционально)
+            </label>
+            <input
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+7…"
+            />
           </div>
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Удобный старт</label>
-            <select className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-                    value={start} onChange={e=>setStart(e.target.value as any)}>
+            <select
+              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+              value={start}
+              onChange={(e) => setStart(e.target.value as any)}
+            >
               <option value="now">на этой неделе</option>
               <option value="month">в течение месяца</option>
               <option value="unsure">уточню</option>
@@ -289,27 +376,45 @@ function FormModal(props: {
           </div>
 
           <div className="grid gap-1">
-            <label className="text-xs text-[var(--muted)]">Комментарий (опционально)</label>
-            <textarea className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)]
+            <label className="text-xs text-[var(--muted)]">
+              Комментарий (опционально)
+            </label>
+            <textarea
+              className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)]
                                  outline-none resize-y w-full"
-                      value={comment} onChange={e=>setComment(e.target.value)} placeholder="Коротко о задаче, опыте, банках…" />
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder="Коротко о задаче, опыте, банках…"
+            />
           </div>
 
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={agree} onChange={(e)=>setAgree(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={agree}
+              onChange={(e) => setAgree(e.target.checked)}
+            />
             <span>Согласен на обработку данных</span>
           </label>
 
           <div className="grid grid-cols-2 gap-2 pt-1">
-            <button type="button" onClick={props.onClose}
-                    className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold w-full">
+            <button
+              type="button"
+              onClick={props.onClose}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold w-full"
+            >
               Отмена
             </button>
-            <button type="submit" disabled={!agree || props.locked || sending}
-                    className={`h-11 rounded-xl font-semibold border w-full
-                      ${(!agree || props.locked || sending)
-                        ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                        : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}>
+            <button
+              type="submit"
+              disabled={!agree || props.locked || sending}
+              className={`inline-flex h-11 items-center justify-center rounded-xl font-semibold border w-full
+                      ${
+                        !agree || props.locked || sending
+                          ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                          : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'
+                      }`}
+            >
               {sending ? 'Отправляем…' : 'Отправить заявку'}
             </button>
           </div>

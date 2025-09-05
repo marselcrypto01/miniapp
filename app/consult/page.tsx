@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
 export default function ConsultPage() {
-  // Инициализация (для других функций/присутствия — не блокируем кнопку)
-  useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
+  // Инициализация (не блокирует форму)
+  useEffect(() => {
+    initSupabaseFromTelegram().catch(() => {});
+  }, []);
 
-  // автоподстановка из Telegram
+  // Автоподстановка из Telegram
   const tgUser = useMemo(() => {
     try {
       const wa = (window as any)?.Telegram?.WebApp;
@@ -17,15 +19,17 @@ export default function ConsultPage() {
         name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
         username: u.username ? `@${u.username}` : '',
       };
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, []);
 
-  // форма
-  const [name, setName]     = useState(tgUser?.name ?? '');
+  // Поля формы
+  const [name, setName] = useState(tgUser?.name ?? '');
   const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
-  const [phone, setPhone]   = useState('');
-  const [time, setTime]     = useState('');
-  const [topic, setTopic]   = useState('');
+  const [phone, setPhone] = useState('');
+  const [time, setTime] = useState('');
+  const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
@@ -38,7 +42,9 @@ export default function ConsultPage() {
         phone ? `Телефон: ${phone}` : null,
         time ? `Время: ${time}` : null,
         topic ? `Тема: ${topic}` : null,
-      ].filter(Boolean).join('\n') || 'Консультация';
+      ]
+        .filter(Boolean)
+        .join('\n') || 'Консультация';
 
     try {
       setLoading(true);
@@ -47,11 +53,16 @@ export default function ConsultPage() {
         name: name || tgUser?.name || undefined,
         handle: tgNick || tgUser?.username || undefined,
         phone: phone || undefined,
-        comment: [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`].filter(Boolean).join(' | ') || undefined,
+        comment:
+          [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`]
+            .filter(Boolean)
+            .join(' | ') || undefined,
         message: msg,
       });
       alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
-      setPhone(''); setTime(''); setTopic('');
+      setPhone('');
+      setTime('');
+      setTopic('');
     } catch (e: any) {
       alert('❌ Ошибка отправки: ' + String(e?.message || e));
     } finally {
@@ -70,7 +81,7 @@ export default function ConsultPage() {
             <span>Имя</span>
             <input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none"
               placeholder="Ваше имя"
             />
@@ -80,7 +91,7 @@ export default function ConsultPage() {
             <span>Telegram @username</span>
             <input
               value={tgNick}
-              onChange={e => setTgNick(e.target.value)}
+              onChange={(e) => setTgNick(e.target.value)}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none"
               placeholder="@username"
             />
@@ -90,7 +101,7 @@ export default function ConsultPage() {
             <span>Телефон (необязательно)</span>
             <input
               value={phone}
-              onChange={e => setPhone(e.target.value)}
+              onChange={(e) => setPhone(e.target.value)}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none"
               placeholder="+7…"
             />
@@ -100,7 +111,7 @@ export default function ConsultPage() {
             <span>Желаемое время консультации (необязательно)</span>
             <input
               value={time}
-              onChange={e => setTime(e.target.value)}
+              onChange={(e) => setTime(e.target.value)}
               className="rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none"
               placeholder="Например, пн–пт после 18:00"
             />
@@ -110,7 +121,7 @@ export default function ConsultPage() {
             <span>Тема консультации</span>
             <textarea
               value={topic}
-              onChange={e => setTopic(e.target.value)}
+              onChange={(e) => setTopic(e.target.value)}
               className="min-h-[84px] rounded-md border border-[var(--border)] bg-[var(--surface)] px-3 py-2 outline-none resize-y"
               placeholder="Коротко опишите тему (цели, вопросы, опыт, банки и т.п.)"
             />
@@ -119,7 +130,7 @@ export default function ConsultPage() {
 
         <div className="mt-4">
           <button
-            className="btn-brand"
+            className="btn-brand inline-flex h-11 min-w-36 items-center justify-center rounded-xl px-4 font-semibold"
             onClick={handleSubmit}
             disabled={loading}
             title={loading ? 'Отправляем…' : 'Записаться'}

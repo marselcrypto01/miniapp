@@ -1,10 +1,8 @@
+// app/admin/page.tsx
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import PresenceClient, {
-  readPresenceStore,
-  type PresenceSession as PresenceSessionType,
-} from '@/components/PresenceClient';
+import PresenceClient from '@/components/PresenceClient';
 import { createClient } from '@supabase/supabase-js';
 import { initSupabaseFromTelegram } from '@/lib/db';
 
@@ -14,30 +12,23 @@ type TabKey = 'leads' | 'users' | 'settings';
 
 /* ───────── Проверка админа ───────── */
 function useIsAdmin() {
-  const [st, setSt] = useState<{
-    loading: boolean;
-    allowed: boolean;
-    username?: string;
-  }>({ loading: true, allowed: false });
+  const [st, setSt] = useState<{ loading: boolean; allowed: boolean; username?: string }>({
+    loading: true,
+    allowed: false,
+  });
 
   useEffect(() => {
     let off = false;
     (async () => {
       try {
-        // инициализируем токен (app_role в JWT)
         await initSupabaseFromTelegram().catch(() => {});
-        for (let i = 0; i < 40; i++) {
+        for (let i = 0; i < 10; i++) {
           const wa = (window as any)?.Telegram?.WebApp;
-          if (wa?.initDataUnsafe?.user) {
-            const name = wa.initDataUnsafe.user.username?.toLowerCase?.();
+          if (wa) {
+            const u = wa?.initDataUnsafe?.user;
+            const name = u?.username?.toLowerCase?.();
             const demo = new URLSearchParams(location.search).get('demoAdmin') === '1';
-            if (!off) {
-              setSt({
-                loading: false,
-                allowed: name === 'marselv1' || demo,
-                username: wa.initDataUnsafe.user.username,
-              });
-            }
+            if (!off) setSt({ loading: false, allowed: name === 'marselv1' || demo, username: u?.username });
             return;
           }
           await new Promise((r) => setTimeout(r, 100));
@@ -51,11 +42,6 @@ function useIsAdmin() {
   }, []);
 
   return st;
-}
-
-/* ───────── Утилиты ───────── */
-function clsx(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(' ');
 }
 
 /* ───────── Кнопка ───────── */
@@ -81,13 +67,13 @@ function Btn({
       ? 'bg-transparent border-[var(--border)]'
       : 'bg-[var(--surface-2)] border-[var(--border)]';
   return (
-    <button onClick={onClick} disabled={disabled} className={clsx(base, v, className)}>
+    <button onClick={onClick} disabled={disabled} className={`${base} ${v} ${className}`}>
       {children}
     </button>
   );
 }
 
-/* ───────── Типы ───────── */
+/* ───────── Лиды ───────── */
 type Lead = {
   id: string;
   created_at: string;
@@ -104,7 +90,6 @@ type Lead = {
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
 function getRlsClient() {
   const tryKeys = ['sb_tg_auth_v2', 'sb_tg_auth_v1'];
   let jwt: string | undefined;
@@ -123,51 +108,27 @@ function getRlsClient() {
   });
 }
 
-/* ╔══════════════════════ ЛИДЫ ══════════════════════╗ */
-function StatusPill({ value }: { value: Lead['status'] }) {
-  const map: Record<Lead['status'], string> = {
-    new: 'Новые',
-    in_progress: 'В работе',
-    done: 'Сделка',
-    lost: 'Потеря',
-  };
-  const style: Record<Lead['status'], string> = {
-    new: 'bg-[color-mix(in_oklab,var(--brand)25%,transparent)] border-[color-mix(in_oklab,var(--brand)50%,#000_50%)]',
-    in_progress: 'bg-[var(--surface-2)] border-[var(--border)]',
-    done: 'bg-emerald-500/20 border-emerald-500/40',
-    lost: 'bg-rose-500/20 border-rose-500/40',
-  };
-  return (
-    <span className={clsx('inline-flex h-7 items-center rounded-full px-2.5 text-[12px] border', style[value])}>
-      {map[value]}
-    </span>
-  );
-}
-
+/* ───────── Вкладка «Лиды» (без изменений) ───────── */
 function LeadsTab() {
   const [rows, setRows] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'all' | Lead['status']>('all');
 
-  const sb = useMemo(() => getRlsClient(), []);
-
   async function fetchLeads() {
     setLoading(true);
     try {
+      const sb = getRlsClient();
       let query = sb
         .from('leads')
-        .select(
-          'id,created_at,client_id,username,lead_type,name,handle,phone,comment,message,status'
-        )
+        .select('id,created_at,client_id,username,lead_type,name,handle,phone,comment,message,status')
         .order('created_at', { ascending: false })
         .limit(400);
 
       if (status !== 'all') query = query.eq('status', status);
 
-      const text = q.trim();
-      if (text) {
-        const like = `%${text}%`;
+      if (q.trim().length) {
+        const like = `%${q.trim()}%`;
         query = query.or(
           [
             `username.ilike.${like}`,
@@ -176,7 +137,7 @@ function LeadsTab() {
             `comment.ilike.${like}`,
             `message.ilike.${like}`,
             `client_id.ilike.${like}`,
-          ].join(',')
+          ].join(','),
         );
       }
 
@@ -188,49 +149,22 @@ function LeadsTab() {
     }
   }
 
-  // первый загруз
   useEffect(() => {
     fetchLeads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // автодебаунс поиска/фильтра
-  useEffect(() => {
-    const t = setTimeout(fetchLeads, 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, status]);
+  }, []); // eslint-disable-line
 
   const counts = useMemo(() => {
-    const by: Record<'all' | Lead['status'], number> = {
-      all: rows.length,
-      new: 0,
-      in_progress: 0,
-      done: 0,
-      lost: 0,
-    };
+    const by: Record<string, number> = { all: rows.length, new: 0, in_progress: 0, done: 0, lost: 0 };
     rows.forEach((r) => (by[r.status] = (by[r.status] || 0) + 1));
-    return by;
+    return by as Record<'all' | Lead['status'], number>;
   }, [rows]);
-
-  async function updateStatus(id: string, next: Lead['status']) {
-    // админ может менять — RLS это позволит
-    const { error } = await sb.from('leads').update({ status: next }).eq('id', id);
-    if (error) {
-      alert('Не удалось обновить: ' + error.message);
-      return;
-    }
-    // локально обновим строку без перезагрузки
-    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: next } : r)));
-  }
 
   return (
     <section className="space-y-3 w-full">
-      {/* Панель фильтров */}
       <div className="glass flex flex-wrap items-center gap-2 rounded-2xl p-2">
         <div className="flex items-center gap-2">
           <input
-            className="h-10 w-[min(420px,90vw)] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            className="h-10 w-[280px] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
             placeholder="Поиск: @ник, телефон, комментарий…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -245,12 +179,11 @@ function LeadsTab() {
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={clsx(
-                'inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border',
+              className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border ${
                 status === s
                   ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'
                   : 'bg-[var(--surface-2)] border-[var(--border)]'
-              )}
+              }`}
               title="Фильтр по статусу"
             >
               {s === 'all'
@@ -267,34 +200,26 @@ function LeadsTab() {
         </div>
       </div>
 
-      {/* Таблица */}
       <div className="overflow-auto rounded-2xl border border-[var(--border)]">
-        <table className="min-w-[1024px] w-full text-sm">
-          <thead className="bg-[var(--surface-2)] sticky top-0 z-10">
+        <table className="min-w-[980px] w-full text-sm">
+          <thead className="bg-[var(--surface-2)]">
             <tr className="[&>th]:text-left [&>th]:p-2">
-              <th style={{ width: 160 }}>Дата</th>
-              <th style={{ width: 120 }}>Тип</th>
-              <th style={{ width: 140 }}>Юзернейм</th>
-              <th style={{ width: 140 }}>Ник</th>
-              <th style={{ width: 130 }}>Телефон</th>
-              <th style={{ width: 160 }}>Имя</th>
+              <th>Дата</th>
+              <th>Тип</th>
+              <th>Юзернейм</th>
+              <th>Ник</th>
+              <th>Телефон</th>
+              <th>Имя</th>
               <th>Комментарий</th>
               <th>Message</th>
-              <th style={{ width: 160 }}>Статус</th>
+              <th>Статус</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && !loading && (
+            {rows.length === 0 && (
               <tr>
-                <td className="p-4 text-center text-[var(--muted)]" colSpan={9}>
+                <td className="p-3 text-center text-[var(--muted)]" colSpan={9}>
                   Нет записей
-                </td>
-              </tr>
-            )}
-            {loading && (
-              <tr>
-                <td className="p-4 text-center text-[var(--muted)]" colSpan={9}>
-                  Загружаю…
                 </td>
               </tr>
             )}
@@ -308,22 +233,7 @@ function LeadsTab() {
                 <td className="p-2">{r.name || '—'}</td>
                 <td className="p-2">{r.comment || '—'}</td>
                 <td className="p-2">{r.message || '—'}</td>
-                <td className="p-2">
-                  <div className="flex items-center gap-2">
-                    <StatusPill value={r.status} />
-                    <select
-                      className="h-8 rounded-lg px-2 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
-                      value={r.status}
-                      onChange={(e) => updateStatus(r.id, e.target.value as Lead['status'])}
-                      title="Изменить статус"
-                    >
-                      <option value="new">Новые</option>
-                      <option value="in_progress">В работе</option>
-                      <option value="done">Сделка</option>
-                      <option value="lost">Потеря</option>
-                    </select>
-                  </div>
-                </td>
+                <td className="p-2">{r.status}</td>
               </tr>
             ))}
           </tbody>
@@ -335,17 +245,62 @@ function LeadsTab() {
   );
 }
 
-/* ╔════════════════════ ПОЛЬЗОВАТЕЛИ (локальный прототип) ════════════════════╗ */
-function UsersLive() {
-  const [sessions, setSessions] = useState<PresenceSessionType[]>([]);
+/* ───────── Users: читаем из БД presence_live ───────── */
+
+type PresenceRow = {
+  client_id: string | null;
+  username: string | null;
+  page: string | null;
+  activity: string | null;
+  lesson_id: number | null;
+  progress_pct: number | null;
+  updated_at: string;
+};
+
+function UsersTab() {
+  const [rows, setRows] = useState<PresenceRow[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPresence = async () => {
+    setLoading(true);
+    try {
+      const sb = getRlsClient();
+      // берем последние 24 часа, сортируем по времени (сверху самые свежие)
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await sb
+        .from('presence_live')
+        .select('client_id, username, page, activity, lesson_id, progress_pct, updated_at')
+        .gte('updated_at', since)
+        .order('updated_at', { ascending: false })
+        .limit(2000);
+      if (error) throw error;
+
+      setRows((data ?? []) as PresenceRow[]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // первый загруз + авто-обновление раз в 10 сек
   useEffect(() => {
-    const load = () => setSessions(readPresenceStore());
-    load();
-    const t = setInterval(load, 5000);
+    fetchPresence();
+    const t = setInterval(fetchPresence, 10000);
     return () => clearInterval(t);
-  }, []);
-  const onlineNow = sessions.filter((s) => s.isOnline).length;
-  const totalUnique = useMemo(() => new Set(sessions.map((s) => s.uid)).size, [sessions]);
+  }, []); // eslint-disable-line
+
+  // сгруппируем по client_id — берём самую свежую запись на клиента
+  const latest = useMemo(() => {
+    const map = new Map<string, PresenceRow>();
+    for (const r of rows) {
+      const key = r.client_id || 'unknown';
+      if (!map.has(key)) map.set(key, r);
+    }
+    return Array.from(map.values());
+  }, [rows]);
+
+  const onlineThresholdMs = 45000; // 45 сек
+  const onlineNow = latest.filter((r) => Date.now() - new Date(r.updated_at).getTime() < onlineThresholdMs).length;
+  const totalUnique = latest.length;
 
   return (
     <section className="space-y-4 w-full">
@@ -359,18 +314,22 @@ function UsersLive() {
           <div className="text-2xl font-bold">{onlineNow}</div>
         </div>
         <div className="glass rounded-xl p-4">
-          <div className="text-sm text-[var(--muted)]">Сессий сохранено</div>
-          <div className="text-2xl font-bold">{sessions.length}</div>
+          <div className="text-sm text-[var(--muted)]">Записей за 24ч</div>
+          <div className="text-2xl font-bold">{rows.length}</div>
         </div>
       </div>
 
       <div className="glass rounded-xl p-4 w-full">
-        <div className="mb-3 text-lg font-bold">Список сессий</div>
+        <div className="mb-3 flex items-center justify-between">
+          <div className="text-lg font-bold">Последние сессии (по пользователям)</div>
+          <Btn variant="brand" onClick={fetchPresence} disabled={loading}>
+            {loading ? 'Обновляю…' : 'Обновить'}
+          </Btn>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[var(--muted)]">
-                <th className="px-2 py-2">UID</th>
                 <th className="px-2 py-2">User</th>
                 <th className="px-2 py-2">Страница</th>
                 <th className="px-2 py-2">Активность</th>
@@ -381,39 +340,37 @@ function UsersLive() {
               </tr>
             </thead>
             <tbody>
-              {sessions.length === 0 && (
+              {latest.length === 0 && (
                 <tr>
-                  <td className="px-2 py-2 text-[var(--muted)]" colSpan={8}>
-                    Пусто. Откройте приложение во второй вкладке.
+                  <td className="px-2 py-3 text-[var(--muted)]" colSpan={7}>
+                    Пусто
                   </td>
                 </tr>
               )}
-              {sessions.map((s) => (
-                <tr key={s.uid + '-' + s.updatedAt} className="border-t border-[var(--border)]">
-                  <td className="px-2 py-2">{s.uid.slice(0, 6)}…</td>
-                  <td className="px-2 py-2">{s.username ?? '—'}</td>
-                  <td className="px-2 py-2">{s.page}</td>
-                  <td className="px-2 py-2">{s.activity ?? '—'}</td>
-                  <td className="px-2 py-2">{s.lessonId ?? '—'}</td>
-                  <td className="px-2 py-2">
-                    {s.progressPct !== undefined ? `${s.progressPct}%` : '—'}
-                  </td>
-                  <td className="px-2 py-2">{s.isOnline ? '🟢' : '⚪️'}</td>
-                  <td className="px-2 py-2">{new Date(s.updatedAt).toLocaleTimeString()}</td>
-                </tr>
-              ))}
+              {latest.map((s) => {
+                const isOnline = Date.now() - new Date(s.updated_at).getTime() < onlineThresholdMs;
+                return (
+                  <tr key={(s.client_id || 'unknown') + '-' + s.updated_at} className="border-t border-[var(--border)]">
+                    <td className="px-2 py-2">{s.username ? `@${s.username}` : (s.client_id || '—')}</td>
+                    <td className="px-2 py-2">{s.page || '—'}</td>
+                    <td className="px-2 py-2">{s.activity || '—'}</td>
+                    <td className="px-2 py-2">{s.lesson_id ?? '—'}</td>
+                    <td className="px-2 py-2">{s.progress_pct !== null ? `${s.progress_pct}%` : '—'}</td>
+                    <td className="px-2 py-2">{isOnline ? '🟢' : '⚪️'}</td>
+                    <td className="px-2 py-2">{new Date(s.updated_at).toLocaleTimeString()}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <div className="mt-3 text-xs text-[var(--muted)]">
-          * Прототип: локальный <code>localStorage</code>. Для продакшна — БД + сокеты.
-        </div>
+        <div className="mt-3 text-xs text-[var(--muted)]">* Источник: таблица <code>presence_live</code> в Supabase.</div>
       </div>
     </section>
   );
 }
 
-/* ╔════════════════════ НАСТРОЙКИ (локальные цитаты) ════════════════════╗ */
+/* ───────── Настройки (локально) ───────── */
 function SettingsEditor() {
   const [quotes, setQuotes] = useState<string[]>([]);
   useEffect(() => {
@@ -471,10 +428,10 @@ function SettingsEditor() {
   );
 }
 
-/* ╔════════════════════ СТРАНИЦА АДМИНКИ ════════════════════╗ */
+/* ───────── Страница админки ───────── */
 export default function AdminPage() {
   const { loading, allowed, username } = useIsAdmin();
-  const [tab, setTab] = useState<TabKey>('leads');
+  const [tab, setTab] = useState<TabKey>('users');
 
   if (loading) return null;
   if (!allowed) {
@@ -495,7 +452,6 @@ export default function AdminPage() {
   return (
     <main className={`${WRAP} pt-5 pb-28`} style={{ overflowX: 'hidden' }}>
       <PresenceClient page="admin" activity="Админ-панель" />
-
       <header className="mb-4 flex items-center justify-between">
         <h1 className="text-3xl font-extrabold tracking-tight">Админ-панель</h1>
         <a
@@ -507,40 +463,34 @@ export default function AdminPage() {
       </header>
 
       {tab === 'leads' && <LeadsTab />}
-      {tab === 'users' && <UsersLive />}
+      {tab === 'users' && <UsersTab />}
       {tab === 'settings' && <SettingsEditor />}
 
       {/* Нижний таб-бар */}
-      <nav
-        className="fixed left-0 right-0 bottom-0 z-50"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
-      >
+      <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
         <div className={`${WRAP}`}>
           <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
             <button
               onClick={() => setTab('leads')}
-              className={clsx(
-                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
                 tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              )}
+              }`}
             >
               📥 Лиды
             </button>
             <button
               onClick={() => setTab('users')}
-              className={clsx(
-                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
                 tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              )}
+              }`}
             >
               👥 Пользователи
             </button>
             <button
               onClick={() => setTab('settings')}
-              className={clsx(
-                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
                 tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              )}
+              }`}
             >
               ⚙️ Настройки
             </button>

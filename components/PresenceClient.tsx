@@ -61,54 +61,63 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
   useEffect(() => {
     let cancelled = false;
 
-    // гарантируем, что есть jwt (app_role) перед первой записью
-    initSupabaseFromTelegram().catch(() => {});
-
-    const beat = async (online: boolean) => {
-      if (cancelled) return;
+    const start = async () => {
       try {
-        await writePresence({
-          page,
-          activity,
-          lessonId: lessonId ?? null,
-          progressPct: typeof progressPct === 'number' ? progressPct : undefined,
-          username: username ?? null,
-          // isOnline флаг в БД не требуется — онлайн считаем по updated_at;
-          // но если у вас в edge-функции он обрабатывается, можно передать в meta.
-        });
+        // 1) Надёжно ждём Telegram/JWT (до ~6 сек), чтобы client_id был точно известен
+        await initSupabaseFromTelegram().catch(() => {});
+
+        const beat = async () => {
+          if (cancelled) return;
+          try {
+            await writePresence({
+              page,
+              activity,
+              lessonId: lessonId ?? null,
+              progressPct: typeof progressPct === 'number' ? progressPct : undefined,
+              username: username ?? null,
+            });
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('presence write failed', e);
+          }
+        };
+
+        // 2) Первый пульс сразу
+        await beat();
+
+        // 3) Далее — каждые 15 сек
+        timer.current = window.setInterval(() => {
+          void beat();
+        }, 15000);
+
+        // 4) При возврате во вкладку — тоже пульс
+        const onVisible = () => {
+          if (document.visibilityState === 'visible') void beat();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+
+        // 5) При закрытии/перезагрузке — финальный пульс (best-effort)
+        const onUnload = () => {
+          void beat();
+        };
+        window.addEventListener('beforeunload', onUnload);
+
+        return () => {
+          document.removeEventListener('visibilitychange', onVisible);
+          window.removeEventListener('beforeunload', onUnload);
+        };
       } catch (e) {
-        // тихо падаем — это вспомогательная телеметрия
         // eslint-disable-next-line no-console
-        console.warn('presence write failed', e);
+        console.warn('presence init failed', e);
       }
     };
 
-    // первый пульс сразу
-    void beat(true);
-
-    // далее — каждые 15 сек
-    timer.current = window.setInterval(() => {
-      void beat(true);
-    }, 15000);
-
-    // при возвращении во вкладку — тоже пульс
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') void beat(true);
-    };
-    document.addEventListener('visibilitychange', onVisible);
-
-    // при закрытии/перезагрузке — финальный пульс
-    const onUnload = () => {
-      void beat(false);
-    };
-    window.addEventListener('beforeunload', onUnload);
+    const cleanup = start();
 
     return () => {
       cancelled = true;
       if (timer.current) window.clearInterval(timer.current);
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('beforeunload', onUnload);
-      void beat(false);
+      void cleanup;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, activity, lessonId, progressPct, uid, username]);

@@ -7,8 +7,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-/* ───────── Публичный клиент (invoke + публичные чтения) ─────────
-   Добавляем явные заголовки, чтобы вызовы Edge Functions не падали на 401. */
+/* ───────── Публичный клиент (invoke + публичные чтения) ───────── */
 const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
   global: {
@@ -19,9 +18,9 @@ const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   },
 });
 
-/* ───────────── Кеш JWT (для RLS-операций, НЕ нужен для заявок) ───────────── */
+/* ───────────── Кеш JWT (для RLS-операций) ───────────── */
 type AuthCache = { token: string; clientId: string; role: 'user' | 'admin'; exp: number };
-const LS_AUTH_KEY = 'sb_tg_auth_v2'; // новая версия, чтобы не подхватывать старый токен
+const LS_AUTH_KEY = 'sb_tg_auth_v2';
 
 function loadAuth(): AuthCache | null {
   try {
@@ -51,23 +50,39 @@ function makeRlsClient(token: string) {
   });
 }
 
-/* ───────────── Telegram initData ───────────── */
-function getTelegramInitData(): string {
+/* ───────────── Telegram helpers ───────────── */
+function getTgUsername(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username ?? null;
+  } catch { return null; }
+}
+
+function readInitDataOnce(): string | null {
   const w = window as any;
   const direct = w?.Telegram?.WebApp?.initData as string | undefined;
   if (direct && direct.length > 0) return direct;
 
-  const m = (window.location.hash || '').match(/tgWebAppData=([^&]+)/);
+  const hash = window.location.hash || '';
+  const m = hash.match(/tgWebAppData=([^&]+)/);
   if (m?.[1]) return decodeURIComponent(m[1]);
 
+  return null;
+}
+
+/** Аккуратно ждём initData до timeoutMs (по 100мс) */
+async function waitForInitData(timeoutMs = 6000): Promise<string> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const init = readInitDataOnce();
+    if (init) return init;
+    await new Promise((r) => setTimeout(r, 100));
+  }
   throw new Error('initData не найдено. Откройте мини-приложение из Telegram.');
 }
 
-/* ───────────── Обмен initData → JWT через Edge Function tg-auth ─────────────
-   НУЖНО ТОЛЬКО ДЛЯ RLS-операций (прогресс, presence). Для заявок — не нужно. */
-async function exchangeInitDataToJwt(): Promise<AuthCache> {
-  const initData = getTelegramInitData();
-
+/* ───────────── Обмен initData → JWT через Edge Function tg-auth ───────────── */
+async function exchangeInitDataToJwt(initData: string): Promise<AuthCache> {
   const { data, error } = await sbPublic.functions.invoke('tg-auth', {
     body: { initData },
   });
@@ -85,9 +100,9 @@ async function exchangeInitDataToJwt(): Promise<AuthCache> {
   return { token, clientId, role, exp };
 }
 
-/* ───────────── Публичная инициализация RLS (опционально) ─────────────
-   Вызовите ТОЛЬКО если нужны операции, зависящие от пользователя (прогресс и т.п.). */
+/* ───────────── Инициализация RLS (ждём initData) ───────────── */
 export async function initSupabaseFromTelegram(): Promise<{ clientId: string; role: 'user' | 'admin' }> {
+  // Кеш
   const cached = loadAuth();
   if (cached) {
     authState = cached;
@@ -95,7 +110,13 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
     return { clientId: cached.clientId, role: cached.role };
   }
 
-  const fresh = await exchangeInitDataToJwt();
+  // Ждём initData из Telegram (надёжно, с поллингом)
+  const initData = await waitForInitData().catch((e) => {
+    // Если реально не телега — пробрасываем
+    throw e;
+  });
+
+  const fresh = await exchangeInitDataToJwt(initData);
   authState = fresh;
   saveAuth(fresh);
   makeRlsClient(fresh.token);
@@ -113,6 +134,7 @@ async function getClient(): Promise<SupabaseClient> {
     return rlsClient!;
   }
 
+  // Надёжно инициализируем (ждём initData)
   await initSupabaseFromTelegram();
   return rlsClient!;
 }
@@ -133,7 +155,6 @@ export type DbLesson = {
 };
 
 export async function listLessons(): Promise<DbLesson[]> {
-  // публичного клиента достаточно
   const { data, error } = await sbPublic
     .from('lessons')
     .select('id,title,subtitle,has_test,order_index')
@@ -162,6 +183,7 @@ export type DbProgressRow = {
   client_id: string;
   lesson_id: number;
   status: 'completed' | 'pending';
+  username?: string | null;
   updated_at?: string;
 };
 
@@ -169,7 +191,8 @@ export async function getUserProgress(): Promise<DbProgressRow[]> {
   const sb = await getClient();
   const { data, error } = await sb
     .from('lesson_progress')
-    .select('client_id,lesson_id,status,updated_at');
+    .select('client_id,lesson_id,status,username,updated_at')
+    .order('lesson_id', { ascending: true });
   if (error) throw error;
   return (data as DbProgressRow[]) ?? [];
 }
@@ -178,20 +201,26 @@ export async function saveUserProgress(
   progress: Array<{ lesson_id: number; status: 'completed' | 'pending' }>
 ): Promise<void> {
   const sb = await getClient();
-  const del = await sb.from('lesson_progress').delete().gte('lesson_id', 1);
-  if (del.error) throw del.error;
-  if (!progress.length) return;
+  if (!authState?.clientId) throw new Error('No client id');
 
+  const username = getTgUsername();
+
+  // Upsert по PK (client_id, lesson_id) — без удаления всего набора
   const rows: DbProgressRow[] = progress.map((p) => ({
     client_id: authState!.clientId,
     lesson_id: p.lesson_id,
     status: p.status,
+    username: username ?? null,
   }));
-  const ins = await sb.from('lesson_progress').insert(rows);
-  if (ins.error) throw ins.error;
+
+  const { error } = await sb
+    .from('lesson_progress')
+    .upsert(rows, { onConflict: 'client_id,lesson_id' });
+
+  if (error) throw error;
 }
 
-/* PRESENCE (по желанию через RLS-JWT; если упадёт — молча игнорим) */
+/* PRESENCE (RLS выключен у таблицы; ждём client_id для корректной привязки) */
 export async function writePresence(input: {
   page: string;
   activity?: string;
@@ -200,18 +229,19 @@ export async function writePresence(input: {
   username?: string | null;
 }): Promise<void> {
   try {
-    const sb = await getClient(); // используем RLS-клиент
-    await sb.from('presence_live').upsert({
+    const sb = await getClient(); // дожидаемся JWT → есть client_id
+    await sb.from('presence_live').insert({
       client_id: authState?.clientId ?? null,
       page: input.page,
       activity: input.activity ?? null,
       lesson_id: input.lessonId ?? null,
-      progress_pct: input.progressPct ?? null,
+      progress_pct: typeof input.progressPct === 'number' ? input.progressPct : null,
       username: input.username ?? null,
       updated_at: new Date().toISOString(),
     });
   } catch (e) {
     // необязательная метрика — не ломаем UX
+    // eslint-disable-next-line no-console
     console.warn('writePresence error', e);
   }
 }
@@ -223,7 +253,7 @@ export async function createLead(input: {
   handle?: string;
   phone?: string;
   comment?: string;
-  message?: string; // опционально оставляем как “сырое тело”
+  message?: string;
 }): Promise<void> {
   const initData = (window as any)?.Telegram?.WebApp?.initData;
   if (!initData) throw new Error('Откройте мини-приложение из Telegram');
@@ -236,4 +266,3 @@ export async function createLead(input: {
   });
   if (error) throw error;
 }
-

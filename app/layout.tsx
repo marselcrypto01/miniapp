@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import Script from 'next/script';
 import BottomNavGuard from '@/components/BottomNavGuard';
-import AppHeartbeat from '@/components/AppHeartbeat'; // <-- добавили
+import AppHeartbeat from '@/components/AppHeartbeat';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -14,15 +14,54 @@ export const metadata: Metadata = {
   description: 'Telegram Mini App',
 };
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+const supabaseOrigin = (() => {
+  try {
+    const u = new URL(supabaseUrl);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return '';
+  }
+})();
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // Telegram WebView может добавлять style на <html>.
     // suppressHydrationWarning устраняет mismatch при гидрации.
     <html lang="ru" suppressHydrationWarning>
       <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        {/* DNS/TCP прогоны заранее — ускоряет мобильную сеть */}
+        {supabaseOrigin ? (
+          <>
+            <link rel="preconnect" href={supabaseOrigin} crossOrigin="" />
+            <link rel="dns-prefetch" href={supabaseOrigin} />
+          </>
+        ) : null}
+        <link rel="preconnect" href="https://telegram.org" crossOrigin="" />
+        <link rel="dns-prefetch" href="https://telegram.org" />
+
         {/* SDK Телеграма до гидрации, чтобы window.Telegram был доступен ранним скриптам */}
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        {/* Fallback: если SDK долго грузится (мобильная сеть), мягко продолжаем инициализацию */}
+        <Script id="wa-fallback" strategy="afterInteractive">{`
+          (function(){
+            var started = false;
+            function safeStart(){
+              if (started) return;
+              started = true;
+              try {
+                var wa = window.Telegram && window.Telegram.WebApp;
+                if (wa && typeof wa.ready === 'function') wa.ready();
+              } catch(e){}
+            }
+            // если SDK не инициализировался за 5 секунд — не стопорим UI
+            setTimeout(safeStart, 5000);
+          })();
+        `}</Script>
 
         {/* Мягкий автопереход в /admin: только при старте по ?startapp=admin и только для @marselv1 */}
         <Script id="admin-redirect" strategy="afterInteractive">{`

@@ -216,11 +216,14 @@ export async function writePresence(input: {
   }
 }
 
-/* LEADS (ПРОСТО И НАДЕЖНО): через Edge Function submit-lead с service_role
-   JWT на клиенте не нужен. Функция на сервере валидирует initData сама. */
+/* LEADS через submit-lead (service_role на сервере) */
 export async function createLead(input: {
   lead_type: 'consult' | 'course';
-  message?: string;
+  name?: string;
+  handle?: string;
+  phone?: string;
+  comment?: string;
+  message?: string; // опционально оставляем как “сырое тело”
 }): Promise<void> {
   const initData = (window as any)?.Telegram?.WebApp?.initData;
   if (!initData) throw new Error('Откройте мини-приложение из Telegram');
@@ -228,9 +231,9 @@ export async function createLead(input: {
   const { error } = await sbPublic.functions.invoke('submit-lead', {
     body: {
       initData,
-      lead_type: input.lead_type,
-      message: input.message ?? null,
+      ...input,
     },
   });
   if (error) throw error;
 }
+

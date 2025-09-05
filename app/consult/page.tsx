@@ -1,18 +1,11 @@
-// app/consult/page.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
 export default function ConsultPage() {
-  const [authReady, setAuthReady] = useState(false);
-
-  useEffect(() => {
-    (async () => {
-      try { await initSupabaseFromTelegram(); }
-      finally { setAuthReady(true); }
-    })();
-  }, []);
+  // Инициализация (для других функций/присутствия — не блокируем кнопку)
+  useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
 
   // автоподстановка из Telegram
   const tgUser = useMemo(() => {
@@ -36,19 +29,27 @@ export default function ConsultPage() {
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
-    if (loading || !authReady) return;
+    if (loading) return;
 
-    const msg = [
-      name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
-      tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
-      phone ? `Телефон: ${phone}` : null,
-      time  ? `Время: ${time}` : null,
-      topic ? `Тема: ${topic}` : null,
-    ].filter(Boolean).join('\n') || 'Консультация';
+    const msg =
+      [
+        name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
+        tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
+        phone ? `Телефон: ${phone}` : null,
+        time ? `Время: ${time}` : null,
+        topic ? `Тема: ${topic}` : null,
+      ].filter(Boolean).join('\n') || 'Консультация';
 
     try {
       setLoading(true);
-      await createLead({ lead_type: 'consult', message: msg });
+      await createLead({
+        lead_type: 'consult',
+        name: name || tgUser?.name || undefined,
+        handle: tgNick || tgUser?.username || undefined,
+        phone: phone || undefined,
+        comment: [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`].filter(Boolean).join(' | ') || undefined,
+        message: msg,
+      });
       alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
       setPhone(''); setTime(''); setTopic('');
     } catch (e: any) {
@@ -120,10 +121,10 @@ export default function ConsultPage() {
           <button
             className="btn-brand"
             onClick={handleSubmit}
-            disabled={loading || !authReady}
-            title={!authReady ? 'Инициализация…' : (loading ? 'Отправляем…' : 'Записаться')}
+            disabled={loading}
+            title={loading ? 'Отправляем…' : 'Записаться'}
           >
-            {!authReady ? 'Инициализация…' : (loading ? 'Отправляем…' : 'Записаться')}
+            {loading ? 'Отправляем…' : 'Записаться'}
           </button>
         </div>
       </div>

@@ -2,11 +2,12 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import PresenceClient, { readPresenceStore, type PresenceSession as PresenceSessionType } from '@/components/PresenceClient';
-import { LESSONS, type LessonMeta } from '@/lib/lessons';
+import { createClient } from '@supabase/supabase-js';
+import { initSupabaseFromTelegram } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
-type TabKey = 'lessons' | 'users' | 'settings';
+type TabKey = 'leads' | 'users' | 'settings';
 
 function useIsAdmin() {
   const [st, setSt] = useState<{ loading: boolean; allowed: boolean; username?: string }>({ loading: true, allowed: false });
@@ -14,8 +15,9 @@ function useIsAdmin() {
     let off = false;
     (async () => {
       try {
+        // Получим JWT (назначит app_role в токен) — и не заблокируем UI, если не получится
+        await initSupabaseFromTelegram().catch(() => {});
         for (let i = 0; i < 10; i++) {
-          // @ts-ignore
           const wa = (window as any)?.Telegram?.WebApp;
           if (wa) {
             const u = wa?.initDataUnsafe?.user;
@@ -47,140 +49,136 @@ function Btn({ children, onClick, disabled, variant = 'ghost', className = '' }:
   return <button onClick={onClick} disabled={disabled} className={`${base} ${v} ${className}`}>{children}</button>;
 }
 
-export default function AdminPage() {
-  const { loading, allowed, username } = useIsAdmin();
-  const [tab, setTab] = useState<TabKey>('lessons');
+/* ───────── Лиды ───────── */
+type Lead = {
+  id: string;
+  created_at: string;
+  client_id: string | null;
+  username: string | null;
+  lead_type: 'consult' | 'course';
+  name: string | null;
+  handle: string | null;
+  phone: string | null;
+  comment: string | null;
+  message: string | null;
+  status: 'new' | 'in_progress' | 'done' | 'lost';
+};
 
-  if (loading) return null;
-  if (!allowed) {
-    return (
-      <main className={`${WRAP} py-10`}>
-        <PresenceClient page="admin" activity="Админ-панель (нет доступа)" />
-        <div className="glass rounded-2xl p-6 text-center">
-          <div className="text-3xl">🔒</div>
-          <h1 className="text-xl font-bold mt-1">Доступ запрещён</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Только для <b>@marselv1</b>. {username ? <>Вы: <b>@{username}</b></> : null}</p>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className={`${WRAP} pt-5 pb-28`} style={{ overflowX: 'hidden' }}>
-      <PresenceClient page="admin" activity="Админ-панель" />
-      <h1 className="text-3xl font-extrabold tracking-tight mb-4">Админ-панель</h1>
-
-      {tab === 'lessons' && <LessonsEditor />}
-      {tab === 'users' && <UsersLive />}
-      {tab === 'settings' && <SettingsEditor />}
-
-      {/* нижний таб-бар админки (свой, не общий) */}
-      <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
-        <div className={`${WRAP}`}>
-          <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
-            <button onClick={()=>setTab('lessons')} className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='lessons'?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>📚 Уроки</button>
-            <button onClick={()=>setTab('users')}   className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='users'  ?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>👥 Пользователи</button>
-            <button onClick={()=>setTab('settings')}className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='settings'?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>⚙️ Настройки</button>
-          </div>
-        </div>
-      </nav>
-    </main>
-  );
+const url  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+function getRlsClient() {
+  const raw = typeof window !== 'undefined' ? localStorage.getItem('sb_tg_auth_v2') : null;
+  const jwt = raw ? (JSON.parse(raw)?.token as string | undefined) : undefined;
+  return createClient(url, anon, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: jwt ? { headers: { Authorization: `Bearer ${jwt}` } } : undefined,
+  });
 }
 
-/* ─── Уроки ─── */
-type LessonEditable = { id:number; title:string; subtitle?:string; description?:string };
+function LeadsTab() {
+  const [rows, setRows] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<'all' | Lead['status']>('all');
 
-function LessonsEditor() {
-  const [items, setItems] = useState<LessonEditable[]>([]);
-  const [snapshot, setSnapshot] = useState<LessonEditable[]>([]); // последнее сохранение
-
-  useEffect(() => {
-    const seed = () => (LESSONS as LessonMeta[]).map(l => ({
-      id: l.id, title: l.title, subtitle: l.subtitle || '', description: l.description || '',
-    }));
+  async function fetchLeads() {
+    setLoading(true);
     try {
-      const raw = localStorage.getItem('admin_lessons');
-      const arr = raw ? JSON.parse(raw) as any[] : null;
-      const normalized = (arr?.length ? arr : seed()).map(l => ({
-        id: Number(l.id), title: String(l.title ?? ''), subtitle: String(l.subtitle ?? ''), description: String(l.description ?? ''),
-      })) as LessonEditable[];
-      setItems(normalized);
-      setSnapshot(normalized);
-    } catch {
-      const s = seed(); setItems(s); setSnapshot(s);
+      const sb = getRlsClient();
+      let query = sb.from('leads')
+        .select('id,created_at,client_id,username,lead_type,name,handle,phone,comment,message,status')
+        .order('created_at', { ascending: false })
+        .limit(400);
+
+      if (status !== 'all') query = query.eq('status', status);
+
+      if (q.trim().length) {
+        const like = `%${q.trim()}%`;
+        query = query.or([
+          `username.ilike.${like}`,
+          `handle.ilike.${like}`,
+          `phone.ilike.${like}`,
+          `comment.ilike.${like}`,
+          `message.ilike.${like}`,
+          `client_id.ilike.${like}`,
+        ].join(','));
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setRows((data ?? []) as Lead[]);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }
 
-  const patch = (id:number, patch:Partial<LessonEditable>) =>
-    setItems(prev => prev.map(x => x.id===id ? {...x, ...patch} : x));
-
-  const isDirty = (l:LessonEditable) => {
-    const s = snapshot.find(x=>x.id===l.id);
-    return !s || s.title!==l.title || (s.subtitle??'')!==(l.subtitle??'') || (s.description??'')!==(l.description??'');
-  };
-
-  const saveLesson = (id:number) => {
-    setItems(prev => {
-      const next = [...prev];
-      localStorage.setItem('admin_lessons', JSON.stringify(next));
-      const updated = next.find(x=>x.id===id)!;
-      setSnapshot(s => s.map(x => x.id===id ? {...updated} : x));
-      return next;
-    });
-  };
-
-  const resetLesson = (id:number) => {
-    setItems(prev => prev.map(x => x.id===id ? {...(snapshot.find(s=>s.id===id) as LessonEditable)} : x));
-  };
+  useEffect(() => { fetchLeads(); }, []); // первый загруз
 
   return (
-    <section className="space-y-4 w-full">
-      {items.map(l => {
-        const dirty = isDirty(l);
-        return (
-          <div key={l.id} className="glass rounded-2xl p-4 w-full">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-sm text-[var(--muted)]">ID: {l.id}</div>
-              <div className="flex items-center gap-2">
-                <Btn variant="brand" onClick={()=>saveLesson(l.id)} disabled={!dirty}>💾 Сохранить</Btn>
-                <Btn onClick={()=>resetLesson(l.id)} disabled={!dirty}>♻️ Сбросить</Btn>
-              </div>
-            </div>
+    <section className="space-y-3 w-full">
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+          placeholder="Поиск: @ник, телефон, комментарий…"
+          value={q} onChange={e=>setQ(e.target.value)}
+        />
+        <select
+          className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+          value={status} onChange={e=>setStatus(e.target.value as any)}
+        >
+          <option value="all">Все</option>
+          <option value="new">Новые</option>
+          <option value="in_progress">В работе</option>
+          <option value="done">Сделка</option>
+          <option value="lost">Потеря</option>
+        </select>
+        <Btn variant="brand" onClick={fetchLeads} disabled={loading}>
+          {loading ? 'Обновляю…' : 'Обновить'}
+        </Btn>
+      </div>
 
-            <label className="block text-sm font-semibold">Заголовок</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-              value={l.title}
-              onChange={(e)=>patch(l.id,{title:e.target.value})}
-            />
+      <div className="overflow-auto rounded-xl border border-[var(--border)]">
+        <table className="min-w-[980px] w-full text-sm">
+          <thead className="bg-[var(--surface-2)]">
+            <tr>
+              <th className="text-left p-2">Дата</th>
+              <th className="text-left p-2">Тип</th>
+              <th className="text-left p-2">Юзернейм</th>
+              <th className="text-left p-2">Ник</th>
+              <th className="text-left p-2">Телефон</th>
+              <th className="text-left p-2">Имя</th>
+              <th className="text-left p-2">Комментарий</th>
+              <th className="text-left p-2">Message</th>
+              <th className="text-left p-2">Статус</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td className="p-3 text-center text-[var(--muted)]" colSpan={9}>Нет записей</td></tr>
+            )}
+            {rows.map((r) => (
+              <tr key={r.id} className="border-t border-[var(--border)] align-top">
+                <td className="p-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
+                <td className="p-2">{r.lead_type === 'consult' ? 'Консультация' : 'Обучение'}</td>
+                <td className="p-2">{r.username ? `@${r.username}` : '—'}</td>
+                <td className="p-2">{r.handle || '—'}</td>
+                <td className="p-2">{r.phone || '—'}</td>
+                <td className="p-2">{r.name || '—'}</td>
+                <td className="p-2">{r.comment || '—'}</td>
+                <td className="p-2">{r.message || '—'}</td>
+                <td className="p-2">{r.status}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-            <label className="mt-3 block text-sm font-semibold">Подзаголовок</label>
-            <input
-              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-              value={l.subtitle || ''}
-              onChange={(e)=>patch(l.id,{subtitle:e.target.value})}
-            />
-
-            <label className="mt-3 block text-sm font-semibold">Описание</label>
-            <textarea
-              className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-              rows={3}
-              value={l.description || ''}
-              onChange={(e)=>patch(l.id,{description:e.target.value})}
-            />
-
-            <div className="mt-2 text-right text-xs text-[var(--muted)]">
-              {dirty ? 'Есть несохранённые изменения' : 'Все изменения сохранены'}
-            </div>
-          </div>
-        );
-      })}
+      <p className="text-xs text-[var(--muted)]">* Для доступа откройте эту страницу из Telegram под админским @username.</p>
     </section>
   );
 }
 
-/* ─── Пользователи ─── */
+/* ───────── Пользователи (presence) ───────── */
 function UsersLive() {
   const [sessions, setSessions] = useState<PresenceSessionType[]>([]);
   useEffect(() => {
@@ -232,7 +230,7 @@ function UsersLive() {
   );
 }
 
-/* ─── Настройки (цитаты) ─── */
+/* ───────── Настройки (локальные цитаты-плейсхолдер) ───────── */
 function SettingsEditor() {
   const [quotes, setQuotes] = useState<string[]>([]);
   useEffect(() => {
@@ -274,5 +272,45 @@ function SettingsEditor() {
         ))}
       </div>
     </section>
+  );
+}
+
+export default function AdminPage() {
+  const { loading, allowed, username } = useIsAdmin();
+  const [tab, setTab] = useState<TabKey>('leads');
+
+  if (loading) return null;
+  if (!allowed) {
+    return (
+      <main className={`${WRAP} py-10`}>
+        <PresenceClient page="admin" activity="Админ-панель (нет доступа)" />
+        <div className="glass rounded-2xl p-6 text-center">
+          <div className="text-3xl">🔒</div>
+          <h1 className="text-xl font-bold mt-1">Доступ запрещён</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">Только для <b>@marselv1</b>. {username ? <>Вы: <b>@{username}</b></> : null}</p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className={`${WRAP} pt-5 pb-28`} style={{ overflowX: 'hidden' }}>
+      <PresenceClient page="admin" activity="Админ-панель" />
+      <h1 className="text-3xl font-extrabold tracking-tight mb-4">Админ-панель</h1>
+
+      {tab === 'leads'    && <LeadsTab />}
+      {tab === 'users'    && <UsersLive />}
+      {tab === 'settings' && <SettingsEditor />}
+
+      <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
+        <div className={`${WRAP}`}>
+          <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
+            <button onClick={()=>setTab('leads')}    className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='leads'   ?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>📥 Лиды</button>
+            <button onClick={()=>setTab('users')}    className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='users'   ?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>👥 Пользователи</button>
+            <button onClick={()=>setTab('settings')} className={`flex-1 h-10 mx-1 rounded-xl font-semibold ${tab==='settings'?'bg-[var(--brand)] text-black':'bg-[var(--surface-2)]'}`}>⚙️ Настройки</button>
+          </div>
+        </div>
+      </nav>
+    </main>
   );
 }

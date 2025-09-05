@@ -7,22 +7,21 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-/* ───────── Клиент для Edge Functions (invoke) с ЯВНЫМ Authorization ─────────
-   SDK не всегда добавляет Authorization при invoke, поэтому добавляем сами. */
+/* ───────── Публичный клиент (invoke + публичные чтения) ─────────
+   Добавляем явные заголовки, чтобы вызовы Edge Functions не падали на 401. */
 const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
   global: {
     headers: {
-      // Критично для /functions/v1/*
       Authorization: `Bearer ${SUPABASE_ANON}`,
       apikey: SUPABASE_ANON,
     },
   },
 });
 
-/* ───────────── Кеш вашего кастомного JWT (для RLS) ───────────── */
+/* ───────────── Кеш JWT (для RLS-операций, НЕ нужен для заявок) ───────────── */
 type AuthCache = { token: string; clientId: string; role: 'user' | 'admin'; exp: number };
-const LS_AUTH_KEY = 'sb_tg_auth_v1';
+const LS_AUTH_KEY = 'sb_tg_auth_v2'; // новая версия, чтобы не подхватывать старый токен
 
 function loadAuth(): AuthCache | null {
   try {
@@ -37,6 +36,9 @@ function loadAuth(): AuthCache | null {
 function saveAuth(a: AuthCache) {
   try { localStorage.setItem(LS_AUTH_KEY, JSON.stringify(a)); } catch {}
 }
+export function clearAuthCache() {
+  try { localStorage.removeItem(LS_AUTH_KEY); } catch {}
+}
 
 /* ───────────── Клиент под ваш RLS-токен ───────────── */
 let rlsClient: SupabaseClient | null = null;
@@ -45,7 +47,6 @@ let authState: AuthCache | null = null;
 function makeRlsClient(token: string) {
   rlsClient = createClient(SUPABASE_URL, SUPABASE_ANON, {
     auth: { persistSession: false, autoRefreshToken: false },
-    // Все запросы к таблицам пойдут с вашим кастомным JWT
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 }
@@ -62,17 +63,17 @@ function getTelegramInitData(): string {
   throw new Error('initData не найдено. Откройте мини-приложение из Telegram.');
 }
 
-/* ───────────── Обмен initData → ваш JWT через Edge Function ───────────── */
+/* ───────────── Обмен initData → JWT через Edge Function tg-auth ─────────────
+   НУЖНО ТОЛЬКО ДЛЯ RLS-операций (прогресс, presence). Для заявок — не нужно. */
 async function exchangeInitDataToJwt(): Promise<AuthCache> {
   const initData = getTelegramInitData();
 
-  // ВАЖНО: invoke идёт через sbPublic с Authorization: Bearer <anon>
   const { data, error } = await sbPublic.functions.invoke('tg-auth', {
     body: { initData },
   });
   if (error) throw error;
 
-  const { token, clientId, role } = data as { token: string; clientId: string; role: 'user'|'admin' };
+  const { token, clientId, role } = data as { token: string; clientId: string; role: 'user' | 'admin' };
 
   // exp из payload токена; fallback: +6h
   let exp = Math.floor(Date.now() / 1000) + 6 * 60 * 60;
@@ -84,7 +85,8 @@ async function exchangeInitDataToJwt(): Promise<AuthCache> {
   return { token, clientId, role, exp };
 }
 
-/* ───────────── Публичная инициализация ───────────── */
+/* ───────────── Публичная инициализация RLS (опционально) ─────────────
+   Вызовите ТОЛЬКО если нужны операции, зависящие от пользователя (прогресс и т.п.). */
 export async function initSupabaseFromTelegram(): Promise<{ clientId: string; role: 'user' | 'admin' }> {
   const cached = loadAuth();
   if (cached) {
@@ -121,7 +123,7 @@ export function getCurrentRole(): 'user' | 'admin' | null { return authState?.ro
 
 /* ╔═══════════════════ ДАЛЬШЕ — РАБОТА С ДАННЫМИ ═══════════════════╗ */
 
-/* LESSONS */
+/* LESSONS (публично читаемые) */
 export type DbLesson = {
   id: number;
   title: string | null;
@@ -131,8 +133,8 @@ export type DbLesson = {
 };
 
 export async function listLessons(): Promise<DbLesson[]> {
-  const sb = await getClient();
-  const { data, error } = await sb
+  // публичного клиента достаточно
+  const { data, error } = await sbPublic
     .from('lessons')
     .select('id,title,subtitle,has_test,order_index')
     .order('order_index', { ascending: true })
@@ -141,22 +143,21 @@ export async function listLessons(): Promise<DbLesson[]> {
   return (data ?? []) as DbLesson[];
 }
 
-/* QUOTES */
+/* QUOTES (также публично читаемые) */
 export async function getRandomDailyQuote(): Promise<string> {
-  const sb = await getClient();
   try {
-    const { data, error } = await sb.rpc('get_random_quote');
+    const { data, error } = await sbPublic.rpc('get_random_quote');
     if (!error && data) {
       const t = String(data);
       if (t) return t;
     }
   } catch {}
-  const { data } = await sb.from('daily_quotes').select('text');
+  const { data } = await sbPublic.from('daily_quotes').select('text');
   const list = (data ?? []).map((r: any) => String(r.text)).filter(Boolean);
   return list.length ? list[Math.floor(Math.random() * list.length)] : 'Успех любит дисциплину.';
 }
 
-/* PROGRESS */
+/* PROGRESS (требует RLS-JWT) */
 export type DbProgressRow = {
   client_id: string;
   lesson_id: number;
@@ -190,7 +191,7 @@ export async function saveUserProgress(
   if (ins.error) throw ins.error;
 }
 
-/* PRESENCE */
+/* PRESENCE (по желанию через RLS-JWT; если упадёт — молча игнорим) */
 export async function writePresence(input: {
   page: string;
   activity?: string;
@@ -199,7 +200,7 @@ export async function writePresence(input: {
   username?: string | null;
 }): Promise<void> {
   try {
-    const sb = await getClient();
+    const sb = await getClient(); // используем RLS-клиент
     await sb.from('presence_live').upsert({
       client_id: authState?.clientId ?? null,
       page: input.page,
@@ -210,23 +211,26 @@ export async function writePresence(input: {
       updated_at: new Date().toISOString(),
     });
   } catch (e) {
+    // необязательная метрика — не ломаем UX
     console.warn('writePresence error', e);
   }
 }
 
-/* LEADS */
+/* LEADS (ПРОСТО И НАДЕЖНО): через Edge Function submit-lead с service_role
+   JWT на клиенте не нужен. Функция на сервере валидирует initData сама. */
 export async function createLead(input: {
   lead_type: 'consult' | 'course';
   message?: string;
 }): Promise<void> {
-  const sb = await getClient();
-  const username = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username || null;
+  const initData = (window as any)?.Telegram?.WebApp?.initData;
+  if (!initData) throw new Error('Откройте мини-приложение из Telegram');
 
-  const { error } = await sb.from('leads').insert({
-    client_id: authState?.clientId ?? null,
-    username,
-    lead_type: input.lead_type,
-    message: input.message ?? null,
+  const { error } = await sbPublic.functions.invoke('submit-lead', {
+    body: {
+      initData,
+      lead_type: input.lead_type,
+      message: input.message ?? null,
+    },
   });
   if (error) throw error;
 }

@@ -77,6 +77,19 @@ function getClientUid(): string {
   } catch { return 'anonymous'; }
 }
 
+/* ───── NEW: user-scoped localStorage ───── */
+function getTgIdSync(): string | null {
+  try {
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch { return null; }
+}
+function ns(key: string): string {
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
+}
+
 export default function Home() {
   const router = useRouter();
 
@@ -242,19 +255,19 @@ export default function Home() {
             status: r.status === 'completed' ? 'completed' : 'pending',
           }));
           setProgress(arr);
-          try { localStorage.setItem('progress', JSON.stringify(arr)); } catch {}
+          try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
         } else {
-          const raw = localStorage.getItem('progress');
+          const raw = localStorage.getItem(ns('progress'));
           if (raw) setProgress(JSON.parse(raw) as Progress[]);
         }
       } catch {
-        const raw = localStorage.getItem('progress');
+        const raw = localStorage.getItem(ns('progress'));
         if (raw) setProgress(JSON.parse(raw) as Progress[]);
       }
 
       try {
-        const ach = localStorage.getItem('achievements');
-        const all = localStorage.getItem('all_completed') === 'true';
+        const ach = localStorage.getItem(ns('achievements'));
+        const all = localStorage.getItem(ns('all_completed')) === 'true';
         if (ach) setAchievements(JSON.parse(ach));
         setAllCompleted(all);
       } catch {}
@@ -265,7 +278,7 @@ export default function Home() {
 
   /* авто-обновление при возврате */
   useEffect(() => {
-    const refresh = () => { try { const raw = localStorage.getItem('progress'); if (raw) setProgress(JSON.parse(raw)); } catch {} };
+    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
@@ -285,13 +298,13 @@ export default function Home() {
     if (finishedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
 
     setAchievements(next);
-    try { localStorage.setItem('achievements', JSON.stringify(next)); } catch {}
+    try { localStorage.setItem(ns('achievements'), JSON.stringify(next)); } catch {}
 
     const finished = finishedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
-    try { localStorage.setItem('all_completed', finished ? 'true' : 'false'); } catch {}
+    try { localStorage.setItem(ns('all_completed'), finished ? 'true' : 'false'); } catch {}
 
-    try { localStorage.setItem('progress', JSON.stringify(progress)); } catch {}
+    try { localStorage.setItem(ns('progress'), JSON.stringify(progress)); } catch {}
     (async () => { try { await saveUserProgress(progress); } catch {} })();
   }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 

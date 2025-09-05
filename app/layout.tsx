@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import Script from 'next/script';
-import BottomNav from '../components/BottomNav';
 import BottomNavGuard from '@/components/BottomNavGuard';
+import AppHeartbeat from '@/components/AppHeartbeat'; // <-- добавили
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -20,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     // suppressHydrationWarning устраняет mismatch при гидрации.
     <html lang="ru" suppressHydrationWarning>
       <head>
-        {/* Грузим SDK ДО гидрации, чтобы любые эффекты/скрипты могли читать window.Telegram */}
+        {/* SDK Телеграма до гидрации, чтобы window.Telegram был доступен ранним скриптам */}
         <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
 
@@ -29,18 +29,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           (function () {
             try {
               function getStartFlag() {
-                // search: ?startapp=admin или ?tgWebAppStartParam=admin
                 var sp  = new URLSearchParams(location.search);
                 var a1  = (sp.get('startapp') || '').toLowerCase();
                 var a2  = (sp.get('tgWebAppStartParam') || '').toLowerCase();
 
-                // иногда Телега кладёт в hash: #tgWebAppStartParam=admin
                 var hash = location.hash || '';
                 var h = '';
                 if (hash.startsWith('#')) {
                   try { h = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch (e) {}
                 }
-
                 return (a1 === 'admin') || (a2 === 'admin') || (h && h.toLowerCase() === 'admin');
               }
 
@@ -61,13 +58,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   }
                 } catch (e) {}
 
-                if (++tries < 80) setTimeout(tick, 100); // до ~8с ждём initData
+                if (++tries < 80) setTimeout(tick, 100); // ждём initData до ~8с
               }
               tick();
             } catch (e) {}
           })();
         `}</Script>
-
       </head>
 
       <body
@@ -75,8 +71,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }}
         suppressHydrationWarning
       >
+        {/* Хартбит: пишет presence_live при заходе и каждые 30с */}
+        <AppHeartbeat />
+
         {children}
-        <BottomNavGuard /> {/* вместо BottomNav */}
+
+        {/* Нижняя навигация с запретом на неразрешённых страницах */}
+        <BottomNavGuard />
       </body>
     </html>
   );

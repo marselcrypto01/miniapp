@@ -24,18 +24,18 @@ function useIsAdmin() {
     let off = false;
     (async () => {
       try {
+        // инициализируем токен (app_role в JWT)
         await initSupabaseFromTelegram().catch(() => {});
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 40; i++) {
           const wa = (window as any)?.Telegram?.WebApp;
-          if (wa) {
-            const u = wa?.initDataUnsafe?.user;
-            const name = u?.username?.toLowerCase?.();
+          if (wa?.initDataUnsafe?.user) {
+            const name = wa.initDataUnsafe.user.username?.toLowerCase?.();
             const demo = new URLSearchParams(location.search).get('demoAdmin') === '1';
             if (!off) {
               setSt({
                 loading: false,
                 allowed: name === 'marselv1' || demo,
-                username: u?.username,
+                username: wa.initDataUnsafe.user.username,
               });
             }
             return;
@@ -51,6 +51,11 @@ function useIsAdmin() {
   }, []);
 
   return st;
+}
+
+/* ───────── Утилиты ───────── */
+function clsx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(' ');
 }
 
 /* ───────── Кнопка ───────── */
@@ -76,13 +81,13 @@ function Btn({
       ? 'bg-transparent border-[var(--border)]'
       : 'bg-[var(--surface-2)] border-[var(--border)]';
   return (
-    <button onClick={onClick} disabled={disabled} className={`${base} ${v} ${className}`}>
+    <button onClick={onClick} disabled={disabled} className={clsx(base, v, className)}>
       {children}
     </button>
   );
 }
 
-/* ───────── Лиды ───────── */
+/* ───────── Типы ───────── */
 type Lead = {
   id: string;
   created_at: string;
@@ -99,8 +104,8 @@ type Lead = {
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
 function getRlsClient() {
-  // читаем любой из возможных ключей кеша
   const tryKeys = ['sb_tg_auth_v2', 'sb_tg_auth_v1'];
   let jwt: string | undefined;
   for (const k of tryKeys) {
@@ -118,16 +123,38 @@ function getRlsClient() {
   });
 }
 
+/* ╔══════════════════════ ЛИДЫ ══════════════════════╗ */
+function StatusPill({ value }: { value: Lead['status'] }) {
+  const map: Record<Lead['status'], string> = {
+    new: 'Новые',
+    in_progress: 'В работе',
+    done: 'Сделка',
+    lost: 'Потеря',
+  };
+  const style: Record<Lead['status'], string> = {
+    new: 'bg-[color-mix(in_oklab,var(--brand)25%,transparent)] border-[color-mix(in_oklab,var(--brand)50%,#000_50%)]',
+    in_progress: 'bg-[var(--surface-2)] border-[var(--border)]',
+    done: 'bg-emerald-500/20 border-emerald-500/40',
+    lost: 'bg-rose-500/20 border-rose-500/40',
+  };
+  return (
+    <span className={clsx('inline-flex h-7 items-center rounded-full px-2.5 text-[12px] border', style[value])}>
+      {map[value]}
+    </span>
+  );
+}
+
 function LeadsTab() {
   const [rows, setRows] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'all' | Lead['status']>('all');
 
+  const sb = useMemo(() => getRlsClient(), []);
+
   async function fetchLeads() {
     setLoading(true);
     try {
-      const sb = getRlsClient();
       let query = sb
         .from('leads')
         .select(
@@ -138,8 +165,9 @@ function LeadsTab() {
 
       if (status !== 'all') query = query.eq('status', status);
 
-      if (q.trim().length) {
-        const like = `%${q.trim()}%`;
+      const text = q.trim();
+      if (text) {
+        const like = `%${text}%`;
         query = query.or(
           [
             `username.ilike.${like}`,
@@ -160,15 +188,41 @@ function LeadsTab() {
     }
   }
 
+  // первый загруз
   useEffect(() => {
     fetchLeads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // автодебаунс поиска/фильтра
+  useEffect(() => {
+    const t = setTimeout(fetchLeads, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, status]);
+
   const counts = useMemo(() => {
-    const by: Record<string, number> = { all: rows.length, new: 0, in_progress: 0, done: 0, lost: 0 };
+    const by: Record<'all' | Lead['status'], number> = {
+      all: rows.length,
+      new: 0,
+      in_progress: 0,
+      done: 0,
+      lost: 0,
+    };
     rows.forEach((r) => (by[r.status] = (by[r.status] || 0) + 1));
-    return by as Record<'all' | Lead['status'], number>;
+    return by;
   }, [rows]);
+
+  async function updateStatus(id: string, next: Lead['status']) {
+    // админ может менять — RLS это позволит
+    const { error } = await sb.from('leads').update({ status: next }).eq('id', id);
+    if (error) {
+      alert('Не удалось обновить: ' + error.message);
+      return;
+    }
+    // локально обновим строку без перезагрузки
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, status: next } : r)));
+  }
 
   return (
     <section className="space-y-3 w-full">
@@ -176,7 +230,7 @@ function LeadsTab() {
       <div className="glass flex flex-wrap items-center gap-2 rounded-2xl p-2">
         <div className="flex items-center gap-2">
           <input
-            className="h-10 w-[280px] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            className="h-10 w-[min(420px,90vw)] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
             placeholder="Поиск: @ник, телефон, комментарий…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -191,11 +245,12 @@ function LeadsTab() {
             <button
               key={s}
               onClick={() => setStatus(s)}
-              className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border ${
+              className={clsx(
+                'inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border',
                 status === s
                   ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'
                   : 'bg-[var(--surface-2)] border-[var(--border)]'
-              }`}
+              )}
               title="Фильтр по статусу"
             >
               {s === 'all'
@@ -214,25 +269,32 @@ function LeadsTab() {
 
       {/* Таблица */}
       <div className="overflow-auto rounded-2xl border border-[var(--border)]">
-        <table className="min-w-[980px] w-full text-sm">
-          <thead className="bg-[var(--surface-2)]">
+        <table className="min-w-[1024px] w-full text-sm">
+          <thead className="bg-[var(--surface-2)] sticky top-0 z-10">
             <tr className="[&>th]:text-left [&>th]:p-2">
-              <th>Дата</th>
-              <th>Тип</th>
-              <th>Юзернейм</th>
-              <th>Ник</th>
-              <th>Телефон</th>
-              <th>Имя</th>
+              <th style={{ width: 160 }}>Дата</th>
+              <th style={{ width: 120 }}>Тип</th>
+              <th style={{ width: 140 }}>Юзернейм</th>
+              <th style={{ width: 140 }}>Ник</th>
+              <th style={{ width: 130 }}>Телефон</th>
+              <th style={{ width: 160 }}>Имя</th>
               <th>Комментарий</th>
               <th>Message</th>
-              <th>Статус</th>
+              <th style={{ width: 160 }}>Статус</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
+            {rows.length === 0 && !loading && (
               <tr>
-                <td className="p-3 text-center text-[var(--muted)]" colSpan={9}>
+                <td className="p-4 text-center text-[var(--muted)]" colSpan={9}>
                   Нет записей
+                </td>
+              </tr>
+            )}
+            {loading && (
+              <tr>
+                <td className="p-4 text-center text-[var(--muted)]" colSpan={9}>
+                  Загружаю…
                 </td>
               </tr>
             )}
@@ -246,21 +308,34 @@ function LeadsTab() {
                 <td className="p-2">{r.name || '—'}</td>
                 <td className="p-2">{r.comment || '—'}</td>
                 <td className="p-2">{r.message || '—'}</td>
-                <td className="p-2">{r.status}</td>
+                <td className="p-2">
+                  <div className="flex items-center gap-2">
+                    <StatusPill value={r.status} />
+                    <select
+                      className="h-8 rounded-lg px-2 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+                      value={r.status}
+                      onChange={(e) => updateStatus(r.id, e.target.value as Lead['status'])}
+                      title="Изменить статус"
+                    >
+                      <option value="new">Новые</option>
+                      <option value="in_progress">В работе</option>
+                      <option value="done">Сделка</option>
+                      <option value="lost">Потеря</option>
+                    </select>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <p className="text-xs text-[var(--muted)]">
-        * Доступ — из Telegram под админским @username.
-      </p>
+      <p className="text-xs text-[var(--muted)]">* Доступ — из Telegram под админским @username.</p>
     </section>
   );
 }
 
-/* ───────── Пользователи (локальный presence прототип) ───────── */
+/* ╔════════════════════ ПОЛЬЗОВАТЕЛИ (локальный прототип) ════════════════════╗ */
 function UsersLive() {
   const [sessions, setSessions] = useState<PresenceSessionType[]>([]);
   useEffect(() => {
@@ -338,7 +413,7 @@ function UsersLive() {
   );
 }
 
-/* ───────── Настройки (локальные цитаты-плейсхолдер) ───────── */
+/* ╔════════════════════ НАСТРОЙКИ (локальные цитаты) ════════════════════╗ */
 function SettingsEditor() {
   const [quotes, setQuotes] = useState<string[]>([]);
   useEffect(() => {
@@ -396,7 +471,7 @@ function SettingsEditor() {
   );
 }
 
-/* ───────── Страница админки ───────── */
+/* ╔════════════════════ СТРАНИЦА АДМИНКИ ════════════════════╗ */
 export default function AdminPage() {
   const { loading, allowed, username } = useIsAdmin();
   const [tab, setTab] = useState<TabKey>('leads');
@@ -444,31 +519,28 @@ export default function AdminPage() {
           <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
             <button
               onClick={() => setTab('leads')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'leads'
-                  ? 'bg-[var(--brand)] text-black'
-                  : 'bg-[var(--surface-2)]'
-              }`}
+              className={clsx(
+                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+                tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
+              )}
             >
               📥 Лиды
             </button>
             <button
               onClick={() => setTab('users')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'users'
-                  ? 'bg-[var(--brand)] text-black'
-                  : 'bg-[var(--surface-2)]'
-              }`}
+              className={clsx(
+                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+                tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
+              )}
             >
               👥 Пользователи
             </button>
             <button
               onClick={() => setTab('settings')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'settings'
-                  ? 'bg-[var(--brand)] text-black'
-                  : 'bg-[var(--surface-2)]'
-              }`}
+              className={clsx(
+                'inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold',
+                tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
+              )}
             >
               ⚙️ Настройки
             </button>

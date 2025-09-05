@@ -3,12 +3,16 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-/* ───────────────────────────── ENV ───────────────────────────── */
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const TG_AUTH_URL = `${SUPABASE_URL}/functions/v1/tg-auth`; // edge-function
+/* ───────────── ENV ───────────── */
+const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-/* ─────────────────────── Кеш auth в браузере ─────────────────── */
+/* ───────────── Клиент для Edge Functions (без кастомного Bearer) ───────────── */
+const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { persistSession: false, autoRefreshToken: false },
+});
+
+/* ───────────── Кеш авторизации (ваш кастомный JWT для RLS) ───────────── */
 type AuthCache = { token: string; clientId: string; role: 'user' | 'admin'; exp: number };
 const LS_AUTH_KEY = 'sb_tg_auth_v1';
 
@@ -16,104 +20,102 @@ function loadAuth(): AuthCache | null {
   try {
     const raw = localStorage.getItem(LS_AUTH_KEY);
     if (!raw) return null;
-    const obj = JSON.parse(raw) as AuthCache;
-    if (!obj?.token || !obj?.clientId || !obj?.exp) return null;
-    if (Date.now() > obj.exp * 1000) return null; // истёк
-    return obj;
-  } catch {
-    return null;
-  }
+    const a = JSON.parse(raw) as AuthCache;
+    if (!a?.token || !a?.clientId || !a?.exp) return null;
+    if (Date.now() > a.exp * 1000) return null;
+    return a;
+  } catch { return null; }
 }
 function saveAuth(a: AuthCache) {
   try { localStorage.setItem(LS_AUTH_KEY, JSON.stringify(a)); } catch {}
 }
 
-/* ────────────── Singleton Supabase client с JWT в хедерах ────── */
-let supa: SupabaseClient | null = null;
+/* ───────────── Клиент под ваш RLS-токен ───────────── */
+let rlsClient: SupabaseClient | null = null;
 let authState: AuthCache | null = null;
 
-function makeClient(token: string) {
-  supa = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+function makeRlsClient(token: string) {
+  rlsClient = createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    // Критично: все запросы к Таблицам/REST будут идти с вашим кастомным JWT
     global: { headers: { Authorization: `Bearer ${token}` } },
   });
 }
 
+/* ───────────── Получаем initData из Telegram WebApp ───────────── */
+function getTelegramInitData(): string {
+  const w = window as any;
+  const direct = w?.Telegram?.WebApp?.initData as string | undefined;
+  if (direct && direct.length > 0) return direct;
+
+  const m = (window.location.hash || '').match(/tgWebAppData=([^&]+)/);
+  if (m?.[1]) return decodeURIComponent(m[1]);
+
+  throw new Error('initData не найдено. Откройте мини-приложение из Telegram.');
+}
+
+/* ───────────── Обмен initData -> ваш JWT через Edge Function ───────────── */
 async function exchangeInitDataToJwt(): Promise<AuthCache> {
-  // читаем initData из Telegram WebApp
-  // @ts-ignore
-  const wa = (window as any)?.Telegram?.WebApp;
-  const initData = wa?.initData;
-  if (!initData || !initData.length) {
-    throw new Error('Telegram initData not found. Открой через бота.');
-  }
+  const initData = getTelegramInitData();
 
-  const r = await fetch(TG_AUTH_URL, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ initData }),
+  // ВАЖНО: вызываем через supabase-js → SDK сам добавит Authorization/apikey
+  const { data, error } = await sbPublic.functions.invoke('tg-auth', {
+    body: { initData },
   });
-  if (!r.ok) {
-    const e = await r.text().catch(() => '');
-    throw new Error(`tg-auth failed: ${r.status} ${e}`);
-  }
-  const { token, clientId, role } = await r.json();
+  if (error) throw error;
 
-  // exp берём из payload токена (база64). fallback: +6h.
+  const { token, clientId, role } = data as { token: string; clientId: string; role: 'user'|'admin' };
+
+  // exp из payload токена, fallback: +6h
   let exp = Math.floor(Date.now() / 1000) + 6 * 60 * 60;
   try {
-    const parts = String(token).split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1]));
-      if (payload?.exp) exp = Number(payload.exp);
-    }
+    const payload = JSON.parse(atob(String(token).split('.')[1]));
+    if (payload?.exp) exp = Number(payload.exp);
   } catch {}
 
   return { token, clientId, role, exp };
 }
 
-/** Публичная точка инициализации. Дерни один раз в app/page, Courses и т.д. */
-export async function initSupabaseFromTelegram(): Promise<{
-  clientId: string; role: 'user' | 'admin';
-}> {
-  // 1) из кеша
+/* ───────────── Публичная инициализация (дергать один раз на странице) ───────────── */
+export async function initSupabaseFromTelegram(): Promise<{ clientId: string; role: 'user' | 'admin' }> {
+  // 1) пробуем кеш
   const cached = loadAuth();
   if (cached) {
     authState = cached;
-    makeClient(cached.token);
+    makeRlsClient(cached.token);
     return { clientId: cached.clientId, role: cached.role };
   }
-  // 2) обмен через edge-function
+
+  // 2) берём новый токен через Edge Function
   const fresh = await exchangeInitDataToJwt();
   authState = fresh;
   saveAuth(fresh);
-  makeClient(fresh.token);
+  makeRlsClient(fresh.token);
   return { clientId: fresh.clientId, role: fresh.role };
 }
 
-/** Внутренний геттер клиента — гарантирует, что он проиниц. */
+/* ───────────── Внутренний геттер клиента под RLS ───────────── */
 async function getClient(): Promise<SupabaseClient> {
-  if (supa) return supa;
-  // пробуем подняться из кеша (без запроса к tg-auth)
+  if (rlsClient) return rlsClient;
+
   const cached = loadAuth();
   if (cached) {
     authState = cached;
-    makeClient(cached.token);
-    return supa!;
+    makeRlsClient(cached.token);
+    return rlsClient!;
   }
-  // иначе просим полноценную инициализацию
+
   await initSupabaseFromTelegram();
-  return supa!;
+  return rlsClient!;
 }
 
-/** Текущий clientId из authState (может пригодиться снаружи) */
-export function getCurrentClientId(): string | null {
-  return authState?.clientId ?? null;
-}
-export function getCurrentRole(): 'user' | 'admin' | null {
-  return authState?.role ?? null;
-}
+/* ───────────── Геттеры текущего состояния ───────────── */
+export function getCurrentClientId(): string | null { return authState?.clientId ?? null; }
+export function getCurrentRole(): 'user' | 'admin' | null { return authState?.role ?? null; }
 
-/* ───────────────────────── LESSONS ───────────────────────────── */
+/* ╔═══════════════════ БЛОКИ ДАННЫХ (таблицы/функции) ═══════════════════╗ */
+
+/* ───── LESSONS ───── */
 export type DbLesson = {
   id: number;
   title: string | null;
@@ -127,16 +129,17 @@ export async function listLessons(): Promise<DbLesson[]> {
   const { data, error } = await sb
     .from('lessons')
     .select('id,title,subtitle,has_test,order_index')
-    .order('order_index', { ascending: true, nullsFirst: false })
+    .order('order_index', { ascending: true })
     .order('id', { ascending: true });
   if (error) throw error;
-  return data ?? [];
+  return (data ?? []) as DbLesson[];
 }
 
-/* ───────────────────────── QUOTES ────────────────────────────── */
+/* ───── QUOTES ───── */
 export async function getRandomDailyQuote(): Promise<string> {
   const sb = await getClient();
-  // сначала RPC (если функция есть)
+
+  // Если есть RPC-функция
   try {
     const { data, error } = await sb.rpc('get_random_quote');
     if (!error && data) {
@@ -144,15 +147,14 @@ export async function getRandomDailyQuote(): Promise<string> {
       if (t) return t;
     }
   } catch {}
-  // табличный путь
-  const { data, error } = await sb.from('daily_quotes').select('text');
-  if (error) return 'Успех любит дисциплину.';
+
+  // Фолбэк на таблицу
+  const { data } = await sb.from('daily_quotes').select('text');
   const list = (data ?? []).map((r: any) => String(r.text)).filter(Boolean);
-  if (!list.length) return 'Успех любит дисциплину.';
-  return list[Math.floor(Math.random() * list.length)];
+  return list.length ? list[Math.floor(Math.random() * list.length)] : 'Успех любит дисциплину.';
 }
 
-/* ───────────────────────── PROGRESS ──────────────────────────── */
+/* ───── PROGRESS ───── */
 export type DbProgressRow = {
   client_id: string;
   lesson_id: number;
@@ -160,7 +162,6 @@ export type DbProgressRow = {
   updated_at?: string;
 };
 
-/** Читает прогресс ТОЛЬКО текущего пользователя (RLS) */
 export async function getUserProgress(): Promise<DbProgressRow[]> {
   const sb = await getClient();
   const { data, error } = await sb
@@ -170,22 +171,19 @@ export async function getUserProgress(): Promise<DbProgressRow[]> {
   return (data as DbProgressRow[]) ?? [];
 }
 
-/** Полная синхронизация для текущего пользователя под RLS */
+/** Полная синхронизация прогресса для текущего пользователя (RLS ограничит только свои строки). */
 export async function saveUserProgress(
   progress: Array<{ lesson_id: number; status: 'completed' | 'pending' }>
 ): Promise<void> {
   const sb = await getClient();
-  const clientId = authState?.clientId;
-  if (!clientId) throw new Error('clientId is empty');
-
-  // Чистим только свои строки (RLS пропустит только свои)
+  // Сначала чистим свои записи
   const del = await sb.from('lesson_progress').delete().gte('lesson_id', 1);
   if (del.error) throw del.error;
 
   if (!progress.length) return;
 
   const rows: DbProgressRow[] = progress.map((p) => ({
-    client_id: clientId,
+    client_id: authState!.clientId,
     lesson_id: p.lesson_id,
     status: p.status,
   }));
@@ -193,7 +191,7 @@ export async function saveUserProgress(
   if (ins.error) throw ins.error;
 }
 
-/* ───────────────────────── PRESENCE ──────────────────────────── */
+/* ───── PRESENCE (онлайн-след) ───── */
 export async function writePresence(input: {
   page: string;
   activity?: string;
@@ -203,9 +201,8 @@ export async function writePresence(input: {
 }): Promise<void> {
   try {
     const sb = await getClient();
-    const clientId = authState?.clientId ?? null;
     await sb.from('presence_live').upsert({
-      client_id: clientId,
+      client_id: authState?.clientId ?? null,
       page: input.page,
       activity: input.activity ?? null,
       lesson_id: input.lessonId ?? null,
@@ -213,26 +210,26 @@ export async function writePresence(input: {
       username: input.username ?? null,
       updated_at: new Date().toISOString(),
     });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.warn('writePresence error', error);
+  } catch (e) {
+    console.warn('writePresence error', e);
   }
 }
 
-/* ───────────────────────── LEADS (заявки) ────────────────────── */
-// Если захочешь использовать:
+/* ───── LEADS (заявки) ─────
+   Таблица public.leads (пример):
+   id uuid default gen_random_uuid(), created_at timestamptz default now(),
+   client_id text, username text, lead_type text, message text.
+*/
 export async function createLead(input: {
   lead_type: 'consult' | 'course';
   message?: string;
 }): Promise<void> {
   const sb = await getClient();
-  const client_id = authState?.clientId ?? null;
   const username =
-    // @ts-ignore
     (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user?.username || null;
 
   const { error } = await sb.from('leads').insert({
-    client_id,
+    client_id: authState?.clientId ?? null,
     username,
     lead_type: input.lead_type,
     message: input.message ?? null,

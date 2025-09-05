@@ -9,14 +9,14 @@ export default function ConsultPage() {
 
   useEffect(() => {
     (async () => {
-      try { await initSupabaseFromTelegram(); } finally { setAuthReady(true); }
+      try { await initSupabaseFromTelegram(); }
+      finally { setAuthReady(true); }
     })();
   }, []);
 
-  // автоподстановка из Telegram (если есть)
+  // автоподстановка из Telegram
   const tgUser = useMemo(() => {
     try {
-      // @ts-ignore
       const wa = (window as any)?.Telegram?.WebApp;
       const u = wa?.initDataUnsafe?.user;
       if (!u) return null;
@@ -28,32 +28,29 @@ export default function ConsultPage() {
   }, []);
 
   // форма
-  const [name, setName] = useState(tgUser?.name ?? '');
+  const [name, setName]     = useState(tgUser?.name ?? '');
   const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
-  const [phone, setPhone] = useState('');
-  const [time, setTime] = useState('');
-  const [topic, setTopic] = useState('');
+  const [phone, setPhone]   = useState('');
+  const [time, setTime]     = useState('');
+  const [topic, setTopic]   = useState('');
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
     if (loading || !authReady) return;
 
-    const msg =
-      [
-        name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
-        tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
-        phone ? `Телефон: ${phone}` : null,
-        time ? `Время: ${time}` : null,
-        topic ? `Тема: ${topic}` : null,
-      ].filter(Boolean).join('\n') || 'Консультация';
+    const msg = [
+      name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
+      tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
+      phone ? `Телефон: ${phone}` : null,
+      time  ? `Время: ${time}` : null,
+      topic ? `Тема: ${topic}` : null,
+    ].filter(Boolean).join('\n') || 'Консультация';
 
     try {
       setLoading(true);
       await createLead({ lead_type: 'consult', message: msg });
       alert('✅ Заявка отправлена! Мы свяжемся с вами в Telegram.');
-      setPhone('');
-      setTime('');
-      setTopic('');
+      setPhone(''); setTime(''); setTopic('');
     } catch (e: any) {
       alert('❌ Ошибка отправки: ' + String(e?.message || e));
     } finally {

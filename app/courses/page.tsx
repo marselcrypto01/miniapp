@@ -4,12 +4,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
-/** ширина = как у мини-бара через переменную в globals.css */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
-
 type FormatKey = 'group' | 'pro';
 
-/* маленький чип-параметр */
 const Chip: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span
     className="inline-flex items-center h-7 px-2.5 rounded-full text-[12px] whitespace-nowrap
@@ -24,26 +21,21 @@ export default function CoursesPage() {
   const [authReady, setAuthReady] = useState(false);
   useEffect(() => {
     (async () => {
-      try { await initSupabaseFromTelegram(); } finally { setAuthReady(true); }
+      try { await initSupabaseFromTelegram(); }
+      finally { setAuthReady(true); }
     })();
   }, []);
 
-  /* блокировка CTA до прохождения базового курса (можно убрать, если не нужно) */
   const [locked, setLocked] = useState(true);
   useEffect(() => {
     try { setLocked(!(localStorage.getItem('all_completed') === 'true')); } catch {}
   }, []);
 
-  /* аккордеоны */
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
-
-  /* модалка заявки */
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
-  /* автоподстановка из Telegram */
   const tgUser = useMemo(() => {
     try {
-      // @ts-ignore
       const wa = (window as any)?.Telegram?.WebApp;
       const u = wa?.initDataUnsafe?.user;
       if (!u) return null;
@@ -54,24 +46,15 @@ export default function CoursesPage() {
     } catch { return null; }
   }, []);
 
-  /* тексты форматов */
   const formats: Record<FormatKey, {
-    title: string;
-    emoji: string;
-    teaser: string;
-    chips: string[];
-    bullets: string[];
-    audience: string;
-    result: string;
-    time: string;
-    price: string;
-    ctaNote?: string;
+    title: string; emoji: string; teaser: string; chips: string[];
+    bullets: string[]; audience: string; result: string; time: string;
+    price: string; ctaNote?: string;
   }> = {
     group: {
       title: 'Групповой курс: Аренда за Крипту',
       emoji: '🧑‍🤝‍🧑',
-      teaser:
-        '1 неделя эфиров + практика. Результат: доход от ~70 000 ₽/мес при стабильной работе с простыми связками.',
+      teaser: '1 неделя эфиров + практика. Результат: доход от ~70 000 ₽/мес при стабильной работе с простыми связками.',
       chips: ['⏱ 1 неделя', '🧑‍🤝‍🧑 Группа+чат', '🤝 Поддержка 3 нед.'],
       bullets: [
         '5 эфиров (пн–пт) + 2 практических дня',
@@ -81,18 +64,15 @@ export default function CoursesPage() {
         'Доступ к боту с полезным материалом и ИИ (мануалы, связки, схемы)',
         'Поддержка в чате 3 недели',
       ],
-      audience:
-        '«Полный новичок», кому нужен понятный старт и доход, который покрывает аренду квартиры или базовые расходы. Никто не уходит без работающего способа.',
-      result:
-        'Базовая система арбитража: стабильный доход от ~70 000 ₽/мес, понимание рисков, умение масштабировать и адаптировать связки под себя.',
+      audience: '«Полный новичок», кому нужен понятный старт и доход, который покрывает аренду квартиры или базовые расходы.',
+      result: 'Базовая система арбитража: стабильный доход от ~70 000 ₽/мес, понимание рисков, масштабирование.',
       time: '1–2 часа в день, старт — раз в месяц',
       price: '50 000 ₽. Доступна официальная рассрочка Сбербанка.',
     },
     pro: {
       title: 'Индивидуальное обучение: КриптоМарс PRO',
       emoji: '💼',
-      teaser:
-        'Личное обучение с Марселем. Ускоренный старт, доход со второго дня и бессрочная поддержка.',
+      teaser: 'Личное обучение с Марселем. Ускоренный старт, доход со второго дня и бессрочная поддержка.',
       chips: ['🎯 1:1 созвоны', '🧩 Личные связки', '♾ Бессрочная поддержка'],
       bullets: [
         'Индивидуальная стратегия под ваши цели',
@@ -103,10 +83,8 @@ export default function CoursesPage() {
         'Бессрочная поддержка',
         'Доступ в клуб КриптоМарс (чаты и материалы)',
       ],
-      audience:
-        'Тем, кому нужен быстрый прогнозируемый результат и индивидуальная настройка заработка под ваш режим.',
-      result:
-        'Личная система, доход до ~200 000 ₽/мес и план масштабирования. Постоянная связь и поддержка.',
+      audience: 'Тем, кому нужен быстрый результат и индивидуальная настройка.',
+      result: 'Личная система, доход до ~200 000 ₽/мес и план масштабирования.',
       time: 'График под вас, старт — по договорённости',
       price: '90 000 ₽. Доступна официальная рассрочка Сбербанка.',
     },
@@ -116,7 +94,6 @@ export default function CoursesPage() {
 
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Заголовок */}
       <header className="mb-3 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Следующий шаг</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
@@ -124,7 +101,6 @@ export default function CoursesPage() {
         </p>
       </header>
 
-      {/* Карточки-аккордеоны */}
       <section className="w-full space-y-3">
         {(Object.keys(formats) as FormatKey[]).map((key) => {
           const f = formats[key];
@@ -135,7 +111,6 @@ export default function CoursesPage() {
               key={key}
               className={`card w-full space-y-3 rounded-2xl ${expanded ? 'shadow-[0_12px_32px_rgba(0,0,0,.35)]' : ''}`}
             >
-              {/* Верхняя часть */}
               <div className="grid grid-cols-[40px_1fr] gap-3">
                 <div className="w-10 h-10 rounded-xl grid place-items-center bg-[var(--surface-2)] border border-[var(--border)] text-[18px] leading-none">
                   {f.emoji}
@@ -159,9 +134,9 @@ export default function CoursesPage() {
                       disabled={locked || !authReady}
                       onClick={() => openForm(key)}
                       className={`h-11 w-full rounded-xl font-semibold border
-                                  ${locked || !authReady
-                                    ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                                    : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
+                        ${locked || !authReady
+                          ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                          : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                     >
                       {locked ? 'После курса' : 'Заявка'}
                     </button>
@@ -176,7 +151,6 @@ export default function CoursesPage() {
                 </div>
               </div>
 
-              {/* Развёрнутый контент */}
               {expanded && (
                 <div className="pt-3 border-t border-[var(--border)] space-y-3">
                   <div>
@@ -206,15 +180,12 @@ export default function CoursesPage() {
                     disabled={locked || !authReady}
                     onClick={() => openForm(key)}
                     className={`mt-1 w-full h-11 rounded-xl font-semibold border
-                                ${locked || !authReady
-                                  ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                                  : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
+                      ${locked || !authReady
+                        ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                        : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
                   >
                     {locked ? 'После курса' : 'Оставить заявку'}
                   </button>
-                  {f.ctaNote && (
-                    <p className="text-xs text-center text-[var(--muted)]">{f.ctaNote}</p>
-                  )}
                 </div>
               )}
             </article>
@@ -224,7 +195,6 @@ export default function CoursesPage() {
 
       <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
 
-      {/* модалка «Оставить заявку» */}
       {formOpen && (
         <FormModal
           formatKey={formOpen}
@@ -257,30 +227,20 @@ export default function CoursesPage() {
   );
 }
 
-/* ───────── форма заявки ───────── */
 function FormModal(props: {
-  formatKey: FormatKey;
-  title: string;
-  locked: boolean;
-  tgName: string;
-  tgUsername: string;
-  onClose: () => void;
+  formatKey: FormatKey; title: string; locked: boolean;
+  tgName: string; tgUsername: string; onClose: () => void;
   onSubmit: (payload: {
-    format: FormatKey;
-    name: string;
-    handle: string;
-    phone: string;
-    start: 'now' | 'month' | 'unsure';
-    comment: string;
-    agree: boolean;
+    format: FormatKey; name: string; handle: string; phone: string;
+    start: 'now'|'month'|'unsure'; comment: string; agree: boolean;
   }) => Promise<void>;
 }) {
-  const [name, setName] = useState(props.tgName);
-  const [handle, setHandle] = useState(props.tgUsername);
-  const [phone, setPhone] = useState('');
-  const [start, setStart] = useState<'now' | 'month' | 'unsure'>('now');
+  const [name, setName]       = useState(props.tgName);
+  const [handle, setHandle]   = useState(props.tgUsername);
+  const [phone, setPhone]     = useState('');
+  const [start, setStart]     = useState<'now'|'month'|'unsure'>('now');
   const [comment, setComment] = useState('');
-  const [agree, setAgree] = useState(false);
+  const [agree, setAgree]     = useState(false);
   const [sending, setSending] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
@@ -288,53 +248,41 @@ function FormModal(props: {
     if (!agree || props.locked || sending) return;
     setSending(true);
     try {
-      await props.onSubmit({
-        format: props.formatKey, name, handle, phone, start, comment, agree,
-      });
+      await props.onSubmit({ format: props.formatKey, name, handle, phone, start, comment, agree });
     } finally { setSending(false); }
   };
 
   return (
     <div className="fixed inset-0 z-[70]">
       <div className="absolute inset-0 bg-black/50" onClick={props.onClose} />
-      <div
-        className="absolute left-1/2 -translate-x-1/2 top-6 w-[min(92vw,420px)]
-                   rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4"
-      >
+      <div className="absolute left-1/2 -translate-x-1/2 top-6 w-[min(92vw,420px)]
+                      rounded-2xl bg-[var(--surface)] border border-[var(--border)] p-4">
         <div className="text-lg font-bold">Оставить заявку</div>
         <p className="text-sm text-[var(--muted)] mt-0.5">{props.title}</p>
 
         <form className="mt-3 space-y-2" onSubmit={submit}>
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Имя</label>
-            <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-              value={name} onChange={(e)=>setName(e.target.value)} placeholder="Как к вам обращаться"
-            />
+            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+                   value={name} onChange={e=>setName(e.target.value)} placeholder="Как к вам обращаться" />
           </div>
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Ник/телеграм</label>
-            <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-              value={handle} onChange={(e)=>setHandle(e.target.value)} placeholder="@username"
-            />
+            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+                   value={handle} onChange={e=>setHandle(e.target.value)} placeholder="@username" />
           </div>
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Телефон (опционально)</label>
-            <input
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-              value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="+7…"
-            />
+            <input className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+                   value={phone} onChange={e=>setPhone(e.target.value)} placeholder="+7…" />
           </div>
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Удобный старт</label>
-            <select
-              className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
-              value={start} onChange={(e)=>setStart(e.target.value as any)}
-            >
+            <select className="h-10 rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none w-full"
+                    value={start} onChange={e=>setStart(e.target.value as any)}>
               <option value="now">на этой неделе</option>
               <option value="month">в течение месяца</option>
               <option value="unsure">уточню</option>
@@ -343,11 +291,9 @@ function FormModal(props: {
 
           <div className="grid gap-1">
             <label className="text-xs text-[var(--muted)]">Комментарий (опционально)</label>
-            <textarea
-              className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)]
-                         outline-none resize-y w-full"
-              value={comment} onChange={(e)=>setComment(e.target.value)} placeholder="Коротко о задаче, опыте, банках…"
-            />
+            <textarea className="min-h-[72px] rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)]
+                                 outline-none resize-y w-full"
+                      value={comment} onChange={e=>setComment(e.target.value)} placeholder="Коротко о задаче, опыте, банках…" />
           </div>
 
           <label className="flex items-center gap-2 text-sm">
@@ -356,21 +302,15 @@ function FormModal(props: {
           </label>
 
           <div className="grid grid-cols-2 gap-2 pt-1">
-            <button
-              type="button"
-              onClick={props.onClose}
-              className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold w-full"
-            >
+            <button type="button" onClick={props.onClose}
+                    className="h-11 rounded-xl bg-[var(--surface-2)] border border-[var(--border)] font-semibold w-full">
               Отмена
             </button>
-            <button
-              type="submit"
-              disabled={!agree || props.locked || sending}
-              className={`h-11 rounded-xl font-semibold border w-full
-                ${(!agree || props.locked || sending)
-                  ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
-                  : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}
-            >
+            <button type="submit" disabled={!agree || props.locked || sending}
+                    className={`h-11 rounded-xl font-semibold border w-full
+                      ${(!agree || props.locked || sending)
+                        ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
+                        : 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)] active:translate-y-[1px]'}`}>
               {sending ? 'Отправляем…' : 'Отправить заявку'}
             </button>
           </div>

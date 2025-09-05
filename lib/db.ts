@@ -102,7 +102,6 @@ async function exchangeInitDataToJwt(initData: string): Promise<AuthCache> {
 
 /* ───────────── Инициализация RLS (ждём initData) ───────────── */
 export async function initSupabaseFromTelegram(): Promise<{ clientId: string; role: 'user' | 'admin' }> {
-  // Кеш
   const cached = loadAuth();
   if (cached) {
     authState = cached;
@@ -110,12 +109,7 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
     return { clientId: cached.clientId, role: cached.role };
   }
 
-  // Ждём initData из Telegram (надёжно, с поллингом)
-  const initData = await waitForInitData().catch((e) => {
-    // Если реально не телега — пробрасываем
-    throw e;
-  });
-
+  const initData = await waitForInitData();
   const fresh = await exchangeInitDataToJwt(initData);
   authState = fresh;
   saveAuth(fresh);
@@ -134,7 +128,6 @@ async function getClient(): Promise<SupabaseClient> {
     return rlsClient!;
   }
 
-  // Надёжно инициализируем (ждём initData)
   await initSupabaseFromTelegram();
   return rlsClient!;
 }
@@ -205,7 +198,7 @@ export async function saveUserProgress(
 
   const username = getTgUsername();
 
-  // Upsert по PK (client_id, lesson_id) — без удаления всего набора
+  // Upsert по PK (client_id, lesson_id)
   const rows: DbProgressRow[] = progress.map((p) => ({
     client_id: authState!.clientId,
     lesson_id: p.lesson_id,

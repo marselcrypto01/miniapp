@@ -1,8 +1,10 @@
+// app/lesson/[id]/page.tsx
 'use client';
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { saveUserProgress } from '@/lib/db';
+import PresenceClient from '@/components/PresenceClient';
+import { initSupabaseFromTelegram, saveUserProgress } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 const CORE_LESSONS_COUNT = 5; // <= ограничение «Следующий» не идёт дальше 5
@@ -18,15 +20,20 @@ const TITLES: Record<number, string> = {
   5: 'Финал: твой первый шаг в мир крипты',
 };
 
-const UID_KEY = 'presence_uid';
-function getClientUid(): string {
+/* === user-scoped localStorage namespace — как на главной === */
+function getTgIdSync(): string | null {
   try {
-    const from = localStorage.getItem(UID_KEY);
-    if (from) return from;
-    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(UID_KEY, gen);
-    return gen;
-  } catch { return 'anonymous'; }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+function ns(key: string): string {
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
 }
 
 export default function LessonPage() {
@@ -36,37 +43,88 @@ export default function LessonPage() {
 
   const [tab, setTab] = React.useState<Tab>('desc');
   const [done, setDone] = React.useState<boolean>(false);
+  const [progress, setProgress] = React.useState<Progress[]>([]);
+  const [authReady, setAuthReady] = React.useState(false);
 
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
+  // Готовим tg-auth один раз, чтобы saveUserProgress имел client_id
+  React.useEffect(() => {
+    let off = false;
+    (async () => {
+      try {
+        await initSupabaseFromTelegram();
+      } catch {
+        // ничего — урок всё равно откроется, просто синк в БД может отложиться
+      } finally {
+        if (!off) setAuthReady(true);
+      }
+    })();
+    return () => {
+      off = true;
+    };
+  }, []);
+
+  // Загружаем локальный (user-scoped) прогресс и статус текущего урока
   React.useEffect(() => {
     try {
-      const raw = localStorage.getItem('progress');
-      if (!raw) return;
-      const arr = JSON.parse(raw) as Progress[];
-      const st = arr.find(p => p.lesson_id === id)?.status === 'completed';
+      const raw = localStorage.getItem(ns('progress'));
+      const arr: Progress[] = raw ? JSON.parse(raw) : [];
+      setProgress(Array.isArray(arr) ? arr : []);
+      const st = arr.find((p) => p.lesson_id === id)?.status === 'completed';
       setDone(!!st);
-    } catch {}
+    } catch {
+      setProgress([]);
+      setDone(false);
+    }
   }, [id]);
+
+  // Обновить локальный и серверный прогресс
+  const persistProgress = async (arr: Progress[]) => {
+    try {
+      localStorage.setItem(ns('progress'), JSON.stringify(arr));
+    } catch {}
+    // Пытаемся сохранить в БД (если tg-auth готов). Ошибки — тихо.
+    try {
+      if (authReady) {
+        await saveUserProgress(
+          arr.map((x) => ({ lesson_id: Number(x.lesson_id), status: x.status }))
+        );
+      }
+    } catch {}
+  };
 
   const toggleDone = async () => {
     try {
-      const raw = localStorage.getItem('progress');
-      let arr: Progress[] = raw ? JSON.parse(raw) : [];
-      const idx = arr.findIndex(p => p.lesson_id === id);
+      let arr = [...progress];
+      const idx = arr.findIndex((p) => p.lesson_id === id);
       const status: 'completed' | 'pending' = done ? 'pending' : 'completed';
-      if (idx >= 0) arr[idx].status = status; else arr.push({ lesson_id: id, status });
-      localStorage.setItem('progress', JSON.stringify(arr));
+      if (idx >= 0) {
+        arr[idx] = { ...arr[idx], status };
+      } else {
+        arr.push({ lesson_id: id, status });
+      }
+      setProgress(arr);
       setDone(!done);
-      try { await saveUserProgress(getClientUid(), arr); } catch {}
+      await persistProgress(arr);
     } catch {}
   };
 
   const canGoPrev = id > 1;
   const canGoNext = id < CORE_LESSONS_COUNT; // <- не даём уйти на 6-й
 
+  // Для Presence — примерно посчитаем общий прогресс по CORE_LESSONS_COUNT
+  const completedCount = React.useMemo(
+    () => progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    [progress]
+  );
+  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+
   return (
     <main className={`${WRAP} py-4`}>
+      {/* Телеметрия (необязательно, но помогает админке видеть урок) */}
+      <PresenceClient page="lesson" activity={`Урок ${id}`} lessonId={id} progressPct={coursePct} />
+
       <header className="mb-3 w-full">
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">{title}</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />

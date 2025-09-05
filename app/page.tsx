@@ -106,11 +106,22 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
+  // ✅ добавил флаг готовности auth, чтобы сначала получить JWT, а потом читать прогресс
+  const [authReady, setAuthReady] = useState(false);
+
   /* Инициализируем Supabase (tg-auth) и страховочный редирект в /admin */
   useEffect(() => {
     let stop = false;
 
-    initSupabaseFromTelegram().catch((e) => console.warn('auth init failed', e));
+    (async () => {
+      try {
+        await initSupabaseFromTelegram();
+      } catch (e) {
+        console.warn('auth init failed', e);
+      } finally {
+        if (!stop) setAuthReady(true);
+      }
+    })();
 
     function wantAdmin() {
       const sp = new URLSearchParams(window.location.search);
@@ -244,8 +255,9 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс (БЕЗ uid — RLS сам ограничит) */
+  /* прогресс (ждём authReady → сначала из БД (RLS), иначе — из user-scoped LS) */
   useEffect(() => {
+    if (!authReady) return;
     (async () => {
       try {
         const rows = await getUserProgress();
@@ -274,7 +286,7 @@ export default function Home() {
 
       setProgressLoaded(true);
     })();
-  }, []);
+  }, [authReady]);
 
   /* авто-обновление при возврате */
   useEffect(() => {

@@ -1,4 +1,6 @@
 // lib/tgAuth.ts
+'use client';
+
 import { supabase } from './supabaseClient';
 
 type TgAuthResponse = {
@@ -36,9 +38,11 @@ export async function callTgAuth(): Promise<TgAuthResponse> {
   const res = data as TgAuthResponse;
 
   // сохраняем токен для RLS-запросов
-  localStorage.setItem(STORAGE_TOKEN,  res.token);
-  localStorage.setItem(STORAGE_CLIENT, res.clientId);
-  localStorage.setItem(STORAGE_ROLE,   res.role);
+  try {
+    localStorage.setItem(STORAGE_TOKEN,  res.token);
+    localStorage.setItem(STORAGE_CLIENT, res.clientId);
+    localStorage.setItem(STORAGE_ROLE,   res.role);
+  } catch {}
 
   return res;
 }

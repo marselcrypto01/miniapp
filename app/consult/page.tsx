@@ -11,18 +11,15 @@ export default function ConsultPage() {
 
   // Автоподстановка из Telegram
   const tgUser = useMemo(() => {
-    try {
-      const wa = (window as any)?.Telegram?.WebApp;
-      const u = wa?.initDataUnsafe?.user;
-      if (!u) return null;
-      return {
-        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
-        username: u.username ? `@${u.username}` : '',
-      };
-    } catch {
-      return null;
-    }
-  }, []);
+  try {
+    const wa = (window as any)?.Telegram?.WebApp;
+    const u = wa?.initDataUnsafe?.user;
+    if (!u) return null;
+    const username = u.username ? `@${u.username}` : '';
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || (username || ''); // <= fallback
+    return { name, username };
+  } catch { return null; }
+}, []);
 
   // Поля формы
   const [name, setName] = useState(tgUser?.name ?? '');

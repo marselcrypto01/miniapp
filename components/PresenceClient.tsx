@@ -52,7 +52,7 @@ function getTgUsername(): string | null {
   }
 }
 
-/** ===== Компонент heartbeats в Supabase ===== */
+/** ===== Компонент heartbeats в Supabase (расширенный) ===== */
 export default function PresenceClient({ page, activity, lessonId, progressPct }: PresenceProps) {
   const timer = useRef<number | null>(null);
   const uid = useMemo(getUid, []);
@@ -61,9 +61,15 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
   useEffect(() => {
     let cancelled = false;
 
+    // Даем понять глобальному AppHeartbeat, что «владелец» — этот компонент
+    const w = window as any;
+    w.__presenceOwner = 'PresenceClient';
+    // и актуальный контекст на всякий случай
+    w.__presencePage = page;
+
     const start = async () => {
       try {
-        // 1) Надёжно ждём Telegram/JWT (до ~6 сек), чтобы client_id был точно известен
+        // ждём JWT, чтобы связать client_id
         await initSupabaseFromTelegram().catch(() => {});
 
         const beat = async () => {
@@ -82,24 +88,22 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
           }
         };
 
-        // 2) Первый пульс сразу
+        // первый пульс
         await beat();
 
-        // 3) Далее — каждые 15 сек
+        // далее — каждые 15 сек
         timer.current = window.setInterval(() => {
           void beat();
         }, 15000);
 
-        // 4) При возврате во вкладку — тоже пульс
+        // пульс при возврате во вкладку
         const onVisible = () => {
           if (document.visibilityState === 'visible') void beat();
         };
         document.addEventListener('visibilitychange', onVisible);
 
-        // 5) При закрытии/перезагрузке — финальный пульс (best-effort)
-        const onUnload = () => {
-          void beat();
-        };
+        // финальный best-effort
+        const onUnload = () => { void beat(); };
         window.addEventListener('beforeunload', onUnload);
 
         return () => {
@@ -112,12 +116,17 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
       }
     };
 
-    const cleanup = start();
+    const cleanupPromise = start();
 
     return () => {
       cancelled = true;
       if (timer.current) window.clearInterval(timer.current);
-      void cleanup;
+      // освобождаем «владение» — вдруг на другой странице только AppHeartbeat
+      const ww = window as any;
+      if (ww.__presenceOwner === 'PresenceClient') {
+        ww.__presenceOwner = undefined;
+      }
+      void cleanupPromise;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, activity, lessonId, progressPct, uid, username]);

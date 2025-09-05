@@ -22,7 +22,8 @@ function useIsAdmin() {
     (async () => {
       try {
         await initSupabaseFromTelegram().catch(() => {});
-        for (let i = 0; i < 10; i++) {
+        // Увеличили окно ожидания SDK (до ~8с), чтобы не было ложных "нет доступа" на мобиле
+        for (let i = 0; i < 80; i++) {
           const wa = (window as any)?.Telegram?.WebApp;
           if (wa) {
             const u = wa?.initDataUnsafe?.user;
@@ -108,7 +109,7 @@ function getRlsClient() {
   });
 }
 
-/* ───────── Вкладка «Лиды» (без изменений) ───────── */
+/* ───────── Вкладка «Лиды» ───────── */
 function LeadsTab() {
   const [rows, setRows] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
@@ -168,6 +169,9 @@ function LeadsTab() {
             placeholder="Поиск: @ник, телефон, комментарий…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') fetchLeads(); // запуск поиска по Enter
+            }}
           />
           <Btn variant="brand" onClick={fetchLeads} disabled={loading}>
             {loading ? 'Обновляю…' : 'Обновить'}
@@ -178,7 +182,11 @@ function LeadsTab() {
           {(['all', 'new', 'in_progress', 'done', 'lost'] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setStatus(s)}
+              onClick={() => {
+                setStatus(s);
+                // мгновенно подтягиваем новый фильтр
+                setTimeout(fetchLeads, 0);
+              }}
               className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border ${
                 status === s
                   ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'

@@ -4,15 +4,33 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+/** user-scoped localStorage namespace */
+function getTgIdSync(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch {
+    return null;
+  }
+}
+function ns(key: string): string {
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
+}
+
 export default function BottomNav() {
   const pathname = usePathname();
   const [lockedCourses, setLockedCourses] = useState(true);
 
   useEffect(() => {
     try {
-      const v = localStorage.getItem('all_completed') === 'true';
+      const v = localStorage.getItem(ns('all_completed')) === 'true';
       setLockedCourses(!v);
-    } catch {}
+    } catch {
+      setLockedCourses(true);
+    }
   }, [pathname]);
 
   const Item = ({

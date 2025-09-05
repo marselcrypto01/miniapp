@@ -22,7 +22,7 @@ function useIsAdmin() {
     (async () => {
       try {
         await initSupabaseFromTelegram().catch(() => {});
-        // Увеличили окно ожидания SDK (до ~8с), чтобы не было ложных "нет доступа" на мобиле
+        // Ждём SDK чуть дольше, чтобы не было ложных отказов на мобильной сети
         for (let i = 0; i < 80; i++) {
           const wa = (window as any)?.Telegram?.WebApp;
           if (wa) {
@@ -37,9 +37,7 @@ function useIsAdmin() {
       } catch {}
       if (!off) setSt({ loading: false, allowed: false });
     })();
-    return () => {
-      off = true;
-    };
+    return () => { off = true; };
   }, []);
 
   return st;
@@ -150,9 +148,7 @@ function LeadsTab() {
     }
   }
 
-  useEffect(() => {
-    fetchLeads();
-  }, []); // eslint-disable-line
+  useEffect(() => { fetchLeads(); }, []); // eslint-disable-line
 
   const counts = useMemo(() => {
     const by: Record<string, number> = { all: rows.length, new: 0, in_progress: 0, done: 0, lost: 0 };
@@ -169,9 +165,7 @@ function LeadsTab() {
             placeholder="Поиск: @ник, телефон, комментарий…"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') fetchLeads(); // запуск поиска по Enter
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter') fetchLeads(); }}
           />
           <Btn variant="brand" onClick={fetchLeads} disabled={loading}>
             {loading ? 'Обновляю…' : 'Обновить'}
@@ -182,11 +176,7 @@ function LeadsTab() {
           {(['all', 'new', 'in_progress', 'done', 'lost'] as const).map((s) => (
             <button
               key={s}
-              onClick={() => {
-                setStatus(s);
-                // мгновенно подтягиваем новый фильтр
-                setTimeout(fetchLeads, 0);
-              }}
+              onClick={() => { setStatus(s); setTimeout(fetchLeads, 0); }}
               className={`inline-flex h-9 items-center justify-center rounded-xl px-3 text-sm border ${
                 status === s
                   ? 'bg-[var(--brand)] text-black border-[color-mix(in_oklab,var(--brand)70%,#000_30%)]'
@@ -253,7 +243,7 @@ function LeadsTab() {
   );
 }
 
-/* ───────── Users: читаем из БД presence_live ───────── */
+/* ───────── Users: presence_live с «липкими» полями ───────── */
 
 type PresenceRow = {
   client_id: string | null;
@@ -273,14 +263,17 @@ function UsersTab() {
     setLoading(true);
     try {
       const sb = getRlsClient();
-      // берем последние 24 часа, сортируем по времени (сверху самые свежие)
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+      // Берём за последние 14 дней — чтобы контекст сохранялся и после выхода
+      const SINCE_DAYS = 14;
+      const since = new Date(Date.now() - SINCE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
       const { data, error } = await sb
         .from('presence_live')
         .select('client_id, username, page, activity, lesson_id, progress_pct, updated_at')
         .gte('updated_at', since)
         .order('updated_at', { ascending: false })
-        .limit(2000);
+        .limit(5000);
       if (error) throw error;
 
       setRows((data ?? []) as PresenceRow[]);
@@ -289,40 +282,77 @@ function UsersTab() {
     }
   };
 
-  // первый загруз + авто-обновление раз в 10 сек
   useEffect(() => {
     fetchPresence();
     const t = setInterval(fetchPresence, 10000);
     return () => clearInterval(t);
   }, []); // eslint-disable-line
 
-  // сгруппируем по client_id — берём самую свежую запись на клиента
-  const latest = useMemo(() => {
-    const map = new Map<string, PresenceRow>();
+  // Собираем «снимок» по пользователю:
+  // - Берём самую свежую запись как основу (в rows уже desc)
+  // - Если в свежей записи нет page/activity/lesson_id/progress_pct, подтягиваем их из более старых записей
+  const latestSticky = useMemo(() => {
+    const map = new Map<string, PresenceRow & { _firstAt: number }>();
+
+    const isEmptyStr = (x: any) => typeof x === 'string' && x.trim() === '';
+    const valOrNull = <T,>(x: T | null | undefined) => (x === undefined || x === null || isEmptyStr(x) ? null : (x as any));
+
     for (const r of rows) {
       const key = r.client_id || 'unknown';
-      if (!map.has(key)) map.set(key, r);
+      const cur = map.get(key);
+
+      if (!cur) {
+        // первая (самая свежая) запись — база
+        map.set(key, { ...r, _firstAt: new Date(r.updated_at).getTime() });
+        continue;
+      }
+
+      // дополняем пустые поля «свежей» записи тем, что встречаем в более старых
+      const merged = { ...cur };
+
+      if (valOrNull(merged.page) === null && valOrNull(r.page) !== null) merged.page = r.page;
+      if (valOrNull(merged.activity) === null && valOrNull(r.activity) !== null) merged.activity = r.activity;
+
+      if (merged.lesson_id === null && r.lesson_id !== null) merged.lesson_id = r.lesson_id;
+
+      // прогресс — возьмём максимум из встреченных (на случай разночтений)
+      if (merged.progress_pct === null && r.progress_pct !== null) {
+        merged.progress_pct = r.progress_pct;
+      } else if (
+        typeof merged.progress_pct === 'number' &&
+        typeof r.progress_pct === 'number' &&
+        r.progress_pct > merged.progress_pct
+      ) {
+        merged.progress_pct = r.progress_pct;
+      }
+
+      // username тоже можно «прилипать», если внезапно пустой (редко, но пусть будет)
+      if (valOrNull(merged.username) === null && valOrNull(r.username) !== null) merged.username = r.username;
+
+      map.set(key, merged);
     }
-    return Array.from(map.values());
+
+    // Возвращаем массив «снимков», уже в порядке свежести по первой записи
+    return Array.from(map.values()).sort((a, b) => b._firstAt - a._firstAt);
   }, [rows]);
 
-  const onlineThresholdMs = 45000; // 45 сек
-  const onlineNow = latest.filter((r) => Date.now() - new Date(r.updated_at).getTime() < onlineThresholdMs).length;
-  const totalUnique = latest.length;
+  const onlineThresholdMs = 45_000;
+  const onlineNow  = latestSticky.filter((r) => Date.now() - new Date(r.updated_at).getTime() < onlineThresholdMs).length;
+  const totalUsers = latestSticky.length;
 
   return (
     <section className="space-y-4 w-full">
       <div className="grid grid-cols-3 gap-3">
         <div className="glass rounded-xl p-4">
           <div className="text-sm text-[var(--muted)]">Всего уникальных</div>
-          <div className="text-2xl font-bold">{totalUnique}</div>
+          <div className="text-2xl font-bold">{totalUsers}</div>
         </div>
         <div className="glass rounded-xl p-4">
           <div className="text-sm text-[var(--muted)]">Сейчас онлайн</div>
           <div className="text-2xl font-bold">{onlineNow}</div>
         </div>
         <div className="glass rounded-xl p-4">
-          <div className="text-sm text-[var(--muted)]">Записей за 24ч</div>
+          <div className="text-sm text-[var(--muted)]">Записей (14 дней)</div>
           <div className="text-2xl font-bold">{rows.length}</div>
         </div>
       </div>
@@ -334,6 +364,7 @@ function UsersTab() {
             {loading ? 'Обновляю…' : 'Обновить'}
           </Btn>
         </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -348,14 +379,14 @@ function UsersTab() {
               </tr>
             </thead>
             <tbody>
-              {latest.length === 0 && (
+              {latestSticky.length === 0 && (
                 <tr>
                   <td className="px-2 py-3 text-[var(--muted)]" colSpan={7}>
                     Пусто
                   </td>
                 </tr>
               )}
-              {latest.map((s) => {
+              {latestSticky.map((s) => {
                 const isOnline = Date.now() - new Date(s.updated_at).getTime() < onlineThresholdMs;
                 return (
                   <tr key={(s.client_id || 'unknown') + '-' + s.updated_at} className="border-t border-[var(--border)]">
@@ -363,7 +394,7 @@ function UsersTab() {
                     <td className="px-2 py-2">{s.page || '—'}</td>
                     <td className="px-2 py-2">{s.activity || '—'}</td>
                     <td className="px-2 py-2">{s.lesson_id ?? '—'}</td>
-                    <td className="px-2 py-2">{s.progress_pct !== null ? `${s.progress_pct}%` : '—'}</td>
+                    <td className="px-2 py-2">{typeof s.progress_pct === 'number' ? `${s.progress_pct}%` : '—'}</td>
                     <td className="px-2 py-2">{isOnline ? '🟢' : '⚪️'}</td>
                     <td className="px-2 py-2">{new Date(s.updated_at).toLocaleTimeString()}</td>
                   </tr>
@@ -372,7 +403,11 @@ function UsersTab() {
             </tbody>
           </table>
         </div>
-        <div className="mt-3 text-xs text-[var(--muted)]">* Источник: таблица <code>presence_live</code> в Supabase.</div>
+
+        <div className="mt-3 text-xs text-[var(--muted)]">
+          * Источник: <code>presence_live</code>. Поля «Страница», «Активность», «Урок», «Прогресс» сохраняют последнее
+          известное значение за 14&nbsp;дней.
+        </div>
       </div>
     </section>
   );
@@ -412,9 +447,7 @@ function SettingsEditor() {
   return (
     <section className="space-y-4 w-full">
       <div className="flex items-center gap-2">
-        <Btn variant="brand" onClick={save}>
-          💾 Сохранить
-        </Btn>
+        <Btn variant="brand" onClick={save}>💾 Сохранить</Btn>
         <Btn onClick={add}>➕ Добавить</Btn>
       </div>
       <div className="grid gap-3">

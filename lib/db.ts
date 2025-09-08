@@ -58,8 +58,11 @@ function getTgUsername(): string | null {
   } catch { return null; }
 }
 
+/** Читаем initData из SDK или из хэша tgWebAppData (если есть) */
 function readInitDataOnce(): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
+
   const direct = w?.Telegram?.WebApp?.initData as string | undefined;
   if (direct && direct.length > 0) return direct;
 
@@ -70,13 +73,17 @@ function readInitDataOnce(): string | null {
   return null;
 }
 
+/** Мягкая эвристика: похоже ли окружение на Telegram */
 function looksLikeTelegram(): boolean {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
-    if (w?.Telegram?.WebApp?.initData) return true;
+    if (w?.Telegram?.WebApp) return true;
 
     const sp   = new URLSearchParams(location.search);
-    const hash = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+    const hashStr = (location.hash || '').replace(/^#/, '');
+    const hash = new URLSearchParams(hashStr);
+
     if (sp.get('tgWebAppData') || hash.get('tgWebAppData')) return true;
     if (sp.get('tgWebAppStartParam') || hash.get('tgWebAppStartParam')) return true;
 
@@ -86,24 +93,36 @@ function looksLikeTelegram(): boolean {
   return false;
 }
 
+/**
+ * Надёжно ждём initData до timeoutMs.
+ * ВАЖНО: не делаем ранний "вне Telegram" — SDK часто появляется с задержкой.
+ */
 async function waitForInitData(timeoutMs = 6000): Promise<string> {
+  // Быстрый путь
   const immediate = readInitDataOnce();
   if (immediate) return immediate;
 
-  // ВНЕ Telegram — выходим сразу, не ждём 6 сек
-  if (!looksLikeTelegram()) {
-    throw new Error('Not a Telegram WebApp environment');
-  }
-
   const start = Date.now();
+  let sawWA = false;
+
   while (Date.now() - start < timeoutMs) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (w?.Telegram?.WebApp) sawWA = true;
+
     const init = readInitDataOnce();
     if (init) return init;
+
     await new Promise((r) => setTimeout(r, 100));
+  }
+
+  // По итогам ожидания: если даже намёков на Telegram нет — говорим, что не WebApp;
+  // если намёки были, но initData так и не пришёл — просим запустить из бота.
+  if (!sawWA && !looksLikeTelegram()) {
+    throw new Error('Not a Telegram WebApp environment');
   }
   throw new Error('initData не найдено. Откройте мини-приложение из Telegram.');
 }
-
 
 /* ───────────── Обмен initData → JWT через Edge Function tg-auth ───────────── */
 async function exchangeInitDataToJwt(initData: string): Promise<AuthCache> {
@@ -272,7 +291,9 @@ export async function createLead(input: {
   comment?: string;
   message?: string;
 }): Promise<void> {
-  const initData = (window as any)?.Telegram?.WebApp?.initData;
+  // Пытаемся взять initData из SDK или из tgWebAppData в хэше
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const initData = (window as any)?.Telegram?.WebApp?.initData || readInitDataOnce();
   if (!initData) throw new Error('Откройте мини-приложение из Telegram');
 
   const { error } = await sbPublic.functions.invoke('submit-lead', {

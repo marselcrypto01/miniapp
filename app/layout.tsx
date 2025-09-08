@@ -134,6 +134,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             `,
           }}
         />
+
+            <script
+      dangerouslySetInnerHTML={{
+        __html: `
+          (function () {
+            try {
+              var isTG = !!(window.Telegram && window.Telegram.WebApp) || /Telegram/i.test(navigator.userAgent || '');
+              if (!isTG) return;
+
+              var KEY = 'tg_cache_bust_done';
+              if (sessionStorage.getItem(KEY) === '1') return;
+
+              var url = new URL(location.href);
+              if (!url.searchParams.has('v')) {
+                url.searchParams.set('v', Date.now().toString(36));
+                sessionStorage.setItem(KEY, '1');
+                location.replace(url.toString());
+              }
+            } catch (e) {}
+          })();
+        `,
+      }}
+    />
+    
       </head>
 
       <body

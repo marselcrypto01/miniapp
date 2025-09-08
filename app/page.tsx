@@ -176,7 +176,12 @@ export default function Home() {
   /* TG / demo (имя) */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
+    const isDev = process.env.NODE_ENV === 'development' || 
+                 window.location.hostname === 'localhost' || 
+                 window.location.hostname === '127.0.0.1' ||
+                 window.location.hostname.includes('localhost');
+    const demo = params.get('demo') === '1' || isDev;
+    
     let cancelled = false;
     const detect = async () => {
       for (let i = 0; i < 10; i++) {
@@ -359,6 +364,22 @@ export default function Home() {
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
         <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
+        
+        {/* Временная кнопка для тестирования */}
+        <button 
+          onClick={() => {
+            const wa = (window as any)?.Telegram?.WebApp;
+            console.log('Telegram WebApp:', wa);
+            console.log('initData:', wa?.initData);
+            console.log('user:', wa?.initDataUnsafe?.user);
+            console.log('firstName state:', firstName);
+            console.log('env:', env);
+            alert(`Имя: ${firstName || 'не найдено'}, Env: ${env}`);
+          }}
+          className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-xs"
+        >
+          Проверить данные
+        </button>
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"

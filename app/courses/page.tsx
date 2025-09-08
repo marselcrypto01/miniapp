@@ -33,6 +33,9 @@ function ns(key: string): string {
 export default function CoursesPage() {
   const { userData } = useTelegramUser();
   
+  // Отладочная информация
+  console.log('Courses page - Telegram data:', userData);
+  
   // Инициализация
   useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
 
@@ -96,6 +99,15 @@ export default function CoursesPage() {
         <p className="mt-2 text-sm text-[var(--muted)]">
           Два формата обучения. Коротко — в карточках, детали — по «Подробнее».
         </p>
+        
+        {/* Отладочная информация для разработки */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+            <div>UserData: {userData ? JSON.stringify(userData) : 'null'}</div>
+            <div>Hostname: {window.location.hostname}</div>
+            <div>NODE_ENV: {process.env.NODE_ENV}</div>
+          </div>
+        )}
       </header>
 
       <section className="w-full space-y-3">

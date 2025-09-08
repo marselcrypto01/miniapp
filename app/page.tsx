@@ -95,6 +95,9 @@ export default function Home() {
   const router = useRouter();
   const { userData, isLoading: telegramLoading, env } = useTelegramUser();
 
+  // Отладочная информация
+  console.log('Telegram data:', { userData, telegramLoading, env });
+
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [quote, setQuote] = useState<string>('');
@@ -328,6 +331,26 @@ export default function Home() {
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
         <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{userData?.firstName ? `, ${userData.firstName}` : ''}!</p>
+
+        {/* Отладочная информация для разработки */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+            <div>Env: {env}</div>
+            <div>Loading: {telegramLoading ? 'true' : 'false'}</div>
+            <div>UserData: {userData ? JSON.stringify(userData) : 'null'}</div>
+            <div>Hostname: {window.location.hostname}</div>
+            <div>NODE_ENV: {process.env.NODE_ENV}</div>
+            <button 
+              onClick={() => {
+                const wa = (window as any)?.Telegram?.WebApp;
+                console.log('Manual check:', { wa, initData: wa?.initData, user: wa?.initDataUnsafe?.user });
+              }}
+              className="mt-1 px-2 py-1 bg-blue-500 text-white rounded text-xs"
+            >
+              Проверить Telegram WebApp
+            </button>
+          </div>
+        )}
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"

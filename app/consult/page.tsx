@@ -7,18 +7,29 @@ import { initSupabaseFromTelegram, createLead } from '@/lib/db';
 export default function ConsultPage() {
   const { userData } = useTelegramUser();
   
+  // Отладочная информация
+  console.log('Consult page - Telegram data:', userData);
+  
   // Инициализация (не блокирует форму)
   useEffect(() => {
     initSupabaseFromTelegram().catch(() => {});
   }, []);
 
   // Поля формы с автозаполнением из Telegram
-  const [name, setName] = useState(userData?.firstName || '');
-  const [tgNick, setTgNick] = useState(userData?.username || '');
+  const [name, setName] = useState('');
+  const [tgNick, setTgNick] = useState('');
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Обновляем поля формы, когда данные пользователя загружаются
+  useEffect(() => {
+    if (userData) {
+      setName(userData.firstName || '');
+      setTgNick(userData.username || '');
+    }
+  }, [userData]);
 
   async function handleSubmit() {
     if (loading) return;
@@ -62,6 +73,16 @@ export default function ConsultPage() {
     <main className="mx-auto max-w-[var(--content-max)] px-4 py-5">
       <h1 className="text-3xl font-extrabold tracking-tight">Запись на консультацию</h1>
       <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
+
+      {/* Отладочная информация для разработки */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+          <div>UserData: {userData ? JSON.stringify(userData) : 'null'}</div>
+          <div>Form values: name="{name}", tgNick="{tgNick}"</div>
+          <div>Hostname: {window.location.hostname}</div>
+          <div>NODE_ENV: {process.env.NODE_ENV}</div>
+        </div>
+      )}
 
       <div className="glass mt-4 rounded-[18px] p-4">
         <div className="grid gap-3">

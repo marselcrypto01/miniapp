@@ -345,17 +345,9 @@ export default function Home() {
     );
   };
 
-  if (env === 'loading') return null;
-  if (env === 'browser') {
-    return (
-      <main className={`flex h-screen items-center justify-center ${WRAP}`}>
-        <div className="glass p-6 text-center w-full">
-          <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
-        </div>
-      </main>
-    );
-  }
+  // ⛔️ БЫЛО: if (env === 'loading') return null;
+  // ⛔️ БЫЛО: if (env === 'browser') { ... "Открой приложение в Telegram" ... }
+  // ✅ УБРАНО: теперь всегда рендерим основное содержимое.
 
   return (
     <main className={`${WRAP} py-4`}>

@@ -69,11 +69,24 @@ function ns(key: string): string {
   return `${key}:anon`;
 }
 
+/* Локальный хелпер: взять имя из Telegram WebApp, если доступно */
+function getTgDisplayNameSync(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!u) return null;
+    const name = u.first_name || u.username || u.last_name || '';
+    return name ? String(name) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const router = useRouter();
 
-  // Имя показываем сразу — не ждём окружение
-  const [firstName] = useState<string | null>('Друг');
+  // Имя: пытаемся взять из Telegram, иначе — «Друг»
+  const [firstName, setFirstName] = useState<string | null>(getTgDisplayNameSync() ?? 'Друг');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -86,9 +99,16 @@ export default function Home() {
   const [progressLoaded, setProgressLoaded] = useState(false);
 
   /* ───────────────────── Быстрый старт ─────────────────────
-     Авторизацию инициируем в фоне (локальная/гостевая) — UI не ждёт. */
+     Авторизацию инициируем в фоне (реальный tg-auth, если есть initData; иначе — гость).
+     UI ничего не ждёт. */
   useEffect(() => {
     initSupabaseFromTelegram().catch(() => {});
+  }, []);
+
+  /* Если SDK Telegram станет доступен позже — обновим имя */
+  useEffect(() => {
+    const n = getTgDisplayNameSync();
+    if (n) setFirstName(n);
   }, []);
 
   /* Уроки — из БД, с fallback на дефолт */
@@ -151,7 +171,7 @@ export default function Home() {
       } catch {}
 
       try {
-        const rows = await getUserProgress(); // если RLS не готов — просто вернётся пусто/упадёт
+        const rows = await getUserProgress(); // если RLS не готов — вернётся пусто/упадёт
         if (rows?.length) {
           const arr: Progress[] = rows.map((r: any) => ({
             lesson_id: Number(r.lesson_id),
@@ -346,7 +366,7 @@ export default function Home() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков и бирж)</p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">

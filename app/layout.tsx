@@ -40,8 +40,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <link rel="dns-prefetch" href={supabaseOrigin} />
           </>
         ) : null}
-        <link rel="preconnect" href="https://telegram.org" crossOrigin="" />
-        <link rel="dns-prefetch" href="https://telegram.org" />
 
         {/* SDK Telegram — грузим ТОЛЬКО внутри Telegram WebView */}
         <Script id="tg-sdk-loader" strategy="afterInteractive">

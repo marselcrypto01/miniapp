@@ -43,8 +43,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://telegram.org" crossOrigin="" />
         <link rel="dns-prefetch" href="https://telegram.org" />
 
-        {/* SDK Телеграма до гидрации, чтобы window.Telegram был доступен ранним скриптам */}
-        <Script src="https://telegram.org/js/telegram-web-app.js" strategy="beforeInteractive" />
+        {/* SDK Телеграма НЕ блокируем рендер */}
+        <Script
+          src="https://telegram.org/js/telegram-web-app.js"
+          strategy="afterInteractive"
+          onError={() => {/* игнор — продолжим без SDK*/}}
+        />
+
+
 
         {/* Fallback: если SDK долго грузится (мобильная сеть), мягко продолжаем инициализацию */}
         <Script id="wa-fallback" strategy="afterInteractive">{`

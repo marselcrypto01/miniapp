@@ -70,8 +70,31 @@ function readInitDataOnce(): string | null {
   return null;
 }
 
-/** Аккуратно ждём initData до timeoutMs (по 100мс) */
+function looksLikeTelegram(): boolean {
+  try {
+    const w = window as any;
+    if (w?.Telegram?.WebApp?.initData) return true;
+
+    const sp   = new URLSearchParams(location.search);
+    const hash = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+    if (sp.get('tgWebAppData') || hash.get('tgWebAppData')) return true;
+    if (sp.get('tgWebAppStartParam') || hash.get('tgWebAppStartParam')) return true;
+
+    const ua = navigator?.userAgent?.toLowerCase?.() || '';
+    if (ua.includes('telegram')) return true;
+  } catch {}
+  return false;
+}
+
 async function waitForInitData(timeoutMs = 6000): Promise<string> {
+  const immediate = readInitDataOnce();
+  if (immediate) return immediate;
+
+  // ВНЕ Telegram — выходим сразу, не ждём 6 сек
+  if (!looksLikeTelegram()) {
+    throw new Error('Not a Telegram WebApp environment');
+  }
+
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const init = readInitDataOnce();
@@ -80,6 +103,7 @@ async function waitForInitData(timeoutMs = 6000): Promise<string> {
   }
   throw new Error('initData не найдено. Откройте мини-приложение из Telegram.');
 }
+
 
 /* ───────────── Обмен initData → JWT через Edge Function tg-auth ───────────── */
 async function exchangeInitDataToJwt(initData: string): Promise<AuthCache> {

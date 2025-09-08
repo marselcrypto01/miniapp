@@ -9,12 +9,23 @@ import { usePathname } from 'next/navigation';
  * - стартует один раз на всё приложение (синглтон);
  * - если на странице подключён PresenceClient, он перехватывает владельца, и AppHeartbeat ничего не делает;
  * - пишет page при заходе/смене роутера и раз в 30 сек.
+ * Дополнительно: вне Telegram WebApp — ничего не пишем.
  */
 export default function AppHeartbeat() {
   const pathname = usePathname();
 
   useEffect(() => {
     const w = window as any;
+
+    // Гард: если не Telegram WebApp — вообще ничего не делаем
+    const wa = w?.Telegram?.WebApp;
+    const isTelegram =
+      !!wa &&
+      typeof wa.ready === 'function' &&
+      typeof wa.initData === 'string' &&
+      wa.initData.length > 0;
+
+    if (!isTelegram) return;
 
     // Если владение уже у PresenceClient — выходим (он пишет чаще и с большим контекстом).
     if (w.__presenceOwner === 'PresenceClient') {
@@ -41,7 +52,9 @@ export default function AppHeartbeat() {
       document.addEventListener('visibilitychange', onVisible);
 
       // финальный best-effort
-      const onUnload = () => { try { beat(); } catch {} };
+      const onUnload = () => {
+        try { beat(); } catch {}
+      };
       window.addEventListener('beforeunload', onUnload);
 
       // сохраняем очистку на window, чтобы не плодить слушателей
@@ -54,7 +67,7 @@ export default function AppHeartbeat() {
     }
 
     // обновляем текущую страницу для пульса
-    (window as any).__presencePage = pathname;
+    w.__presencePage = pathname;
 
     return () => {
       // Ничего не чистим — это глобальный синглтон (чистится только при полной перегрузке

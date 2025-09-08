@@ -64,27 +64,16 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* uid общий — оставляем только для presence */
-const UID_KEY = 'presence_uid';
-function getClientUid(): string {
-  try {
-    const from = localStorage.getItem(UID_KEY);
-    if (from) return from;
-    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(UID_KEY, gen);
-    return gen;
-  } catch { return 'anonymous'; }
-}
-
-/* ───── user-scoped localStorage ───── */
+/* user-scoped localStorage без Telegram id */
 function ns(key: string): string {
-  return `${key}:anon`; // без привязки к Telegram id
+  return `${key}:anon`;
 }
 
 export default function Home() {
   const router = useRouter();
 
-  const [firstName, setFirstName] = useState<string | null>(null);
+  // Имя показываем сразу — не ждём окружение
+  const [firstName] = useState<string | null>('Друг');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -96,46 +85,95 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  // ✅ флаг готовности auth (получаем локальный/гостевой токен)
-  const [authReady, setAuthReady] = useState(false);
-
-  /* Инициализируем "авторизацию" (локально) и потенциальный редирект на /admin по start-параметру */
+  /* ───────────────────── Быстрый старт ─────────────────────
+     Авторизацию инициируем в фоне (локальная/гостевая) — UI не ждёт. */
   useEffect(() => {
-    let stop = false;
-
-    (async () => {
-      try {
-        // внутри этой функции у вас теперь должен вызываться локальный callTgAuth()
-        await initSupabaseFromTelegram();
-      } catch (e) {
-        console.warn('auth init failed', e);
-      } finally {
-        if (!stop) setAuthReady(true);
-      }
-    })();
-
-    // поддержка ?startapp=admin / ?tgWebAppStartParam=admin и #tgWebAppStartParam=admin
-    function wantAdmin() {
-      const sp = new URLSearchParams(window.location.search);
-      const s1 = (sp.get('startapp') || '').toLowerCase();
-      const s2 = (sp.get('tgWebAppStartParam') || '').toLowerCase();
-      let s3 = '';
-      if (location.hash.startsWith('#')) {
-        try { s3 = new URLSearchParams(location.hash.slice(1)).get('tgWebAppStartParam') || ''; } catch {}
-      }
-      return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
-    }
-    if (wantAdmin()) {
-      window.location.replace('/admin');
-    }
-
-    // имя по умолчанию (без Telegram)
-    setFirstName('Друг');
-
-    return () => { stop = true; };
+    initSupabaseFromTelegram().catch(() => {});
   }, []);
 
-  /* вычисления */
+  /* Уроки — из БД, с fallback на дефолт */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listLessons();
+        if (cancelled) return;
+        const mapped: Lesson[] = rows
+          .sort((a: any, b: any) => (a.order_index ?? a.id) - (b.order_index ?? b.id))
+          .map((r: any) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
+        const names: Record<number, string> = {
+          1: 'Крипта без сложных слов: что это и зачем тебе',
+          2: 'Арбитраж: простой способ зарабатывать на обмене крипты',
+          3: 'Риски и страхи: как не потерять деньги на старте',
+          4: '5 ошибок новичков, которые убивают заработок',
+          5: 'Финал: твой первый шаг в мир крипты',
+        };
+        const patched = mapped.map(m => (names[m.id] ? { ...m, title: names[m.id] } : m));
+        setLessons(patched);
+        try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
+      } catch {
+        setLessons([
+          { id: 1, title: 'Крипта без сложных слов: что это и зачем тебе' },
+          { id: 2, title: 'Арбитраж: простой способ зарабатывать на обмене крипты' },
+          { id: 3, title: 'Риски и страхи: как не потерять деньги на старте' },
+          { id: 4, title: '5 ошибок новичков, которые убивают заработок' },
+          { id: 5, title: 'Финал: твой первый шаг в мир крипты' },
+          { id: 6, title: 'Дополнительные материалы', subtitle: 'Секретный чек-лист банков и бирж' },
+        ]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Цитата — без ожиданий */
+  useEffect(() => {
+    (async () => {
+      try {
+        const q = await getRandomDailyQuote();
+        if (q) { setQuote(q); return; }
+      } catch {}
+      try {
+        const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
+        const pool: string[] = Array.isArray(saved) && saved.length ? saved : QUOTES;
+        setQuote(pool[Math.floor(Math.random() * pool.length)]);
+      } catch {
+        setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
+      }
+    })();
+  }, []);
+
+  /* Прогресс — сначала из LS (мгновенно), затем мягко пытаемся подтянуть из БД */
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = localStorage.getItem(ns('progress'));
+        if (raw) setProgress(JSON.parse(raw) as Progress[]);
+      } catch {}
+
+      try {
+        const rows = await getUserProgress(); // если RLS не готов — просто вернётся пусто/упадёт
+        if (rows?.length) {
+          const arr: Progress[] = rows.map((r: any) => ({
+            lesson_id: Number(r.lesson_id),
+            status: r.status === 'completed' ? 'completed' : 'pending',
+          }));
+          setProgress(arr);
+          try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
+        }
+      } catch {}
+
+      try {
+        const ach = localStorage.getItem(ns('achievements'));
+        const all = localStorage.getItem(ns('all_completed')) === 'true';
+        if (ach) setAchievements(JSON.parse(ach));
+        setAllCompleted(all);
+      } catch {}
+
+      setProgressLoaded(true);
+    })();
+  }, []);
+
+  /* Расчёты/метрики */
   const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
   const completedCount = useMemo(
     () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
@@ -154,102 +192,10 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* уроки */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await listLessons();
-        if (cancelled) return;
-        const mapped: Lesson[] = rows
-          .sort((a: any, b: any) => (a.order_index ?? a.id) - (b.order_index ?? b.id))
-          .map((r: any) => ({ id: r.id, title: r.title ?? '', subtitle: r.subtitle ?? undefined }));
-        const names: Record<number, string> = {
-          1: 'Крипта без сложных слов: что это и зачем тебе',
-          2: 'Арбитраж: простой способ зарабатывать на обмене крипты',
-          3: 'Риски и страхи: как не потерять деньги на старте',
-          4: '5 ошибок новичков, которые убивают заработок',
-          5: 'Финал: твой первый шаг в мир крипты',
-        };
-        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
-        setLessons(patched);
-        try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
-      } catch {
-        setLessons([
-          { id: 1, title: 'Крипта без сложных слов: что это и зачем тебе' },
-          { id: 2, title: 'Арбитраж: простой способ зарабатывать на обмене крипты' },
-          { id: 3, title: 'Риски и страхи: как не потерять деньги на старте' },
-          { id: 4, title: '5 ошибок новичков, которые убивают заработок' },
-          { id: 5, title: 'Финал: твой первый шаг в мир крипты' },
-          { id: 6, title: 'Дополнительные материалы', subtitle: 'Секретный чек-лист банков и бирж' },
-        ]);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  /* цитата */
-  useEffect(() => {
-    (async () => {
-      try {
-        const q = await getRandomDailyQuote();
-        if (q) { setQuote(q); return; }
-      } catch {}
-      try {
-        const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
-        const pool: string[] = Array.isArray(saved) && saved.length ? saved : QUOTES;
-        setQuote(pool[Math.floor(Math.random() * pool.length)]);
-      } catch {
-        setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
-      }
-    })();
-  }, []);
-
-  /* прогресс (ждём authReady → сначала из БД, иначе — из user-scoped LS) */
-  useEffect(() => {
-    if (!authReady) return;
-    (async () => {
-      try {
-        const rows = await getUserProgress();
-        if (rows?.length) {
-          const arr: Progress[] = rows.map((r: any) => ({
-            lesson_id: Number(r.lesson_id),
-            status: r.status === 'completed' ? 'completed' : 'pending',
-          }));
-          setProgress(arr);
-          try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
-        } else {
-          const raw = localStorage.getItem(ns('progress'));
-          if (raw) setProgress(JSON.parse(raw) as Progress[]);
-        }
-      } catch {
-        const raw = localStorage.getItem(ns('progress'));
-        if (raw) setProgress(JSON.parse(raw) as Progress[]);
-      }
-
-      try {
-        const ach = localStorage.getItem(ns('achievements'));
-        const all = localStorage.getItem(ns('all_completed')) === 'true';
-        if (ach) setAchievements(JSON.parse(ach));
-        setAllCompleted(all);
-      } catch {}
-
-      setProgressLoaded(true);
-    })();
-  }, [authReady]);
-
-  /* авто-обновление при возврате */
-  useEffect(() => {
-    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
-    window.addEventListener('focus', refresh);
-    const onVis = () => document.visibilityState === 'visible' && refresh();
-    document.addEventListener('visibilitychange', onVis);
-    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
-  }, []);
-
-  /* сохраняем и считаем ачивки */
+  /* Сохранение прогресса/ачивок (асинхронно, не блокируя) */
   useEffect(() => {
     if (!progressLoaded) return;
+
     const next = { ...achievements };
     const _isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
     if (_isCompleted(1)) next.first = true;
@@ -295,7 +241,6 @@ export default function Home() {
     );
   };
 
-  // ❌ Блок «Открой приложение в Telegram» удалён навсегда — всегда рендерим основное содержимое.
   return (
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />

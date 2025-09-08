@@ -13,11 +13,11 @@ import {
 } from '@/lib/db';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
-type Lesson   = { id: number; title: string; subtitle?: string | null };
+type Lesson = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
 
 const CORE_LESSONS_COUNT = 5;
-const POINTS_PER_LESSON  = 100;
+const POINTS_PER_LESSON = 100;
 
 /** ширина = мини-бару через переменную */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
@@ -35,11 +35,11 @@ const QUOTES = [
 /* уровни */
 type LevelKey = 'novice' | 'megagood' | 'almostpro' | 'arbitrager' | 'cryptoboss';
 const LEVELS: Record<LevelKey, { title: string; threshold: number; icon: string }> = {
-  novice:      { title: 'Новичок',      threshold: 0,   icon: '🌱' },
-  megagood:    { title: 'Мегахорош',    threshold: 40,  icon: '💪' },
-  almostpro:   { title: 'ПочтиПрофи',   threshold: 80,  icon: '⚡' },
-  arbitrager:  { title: 'Арбитражник',  threshold: 120, icon: '🎯' },
-  cryptoboss:  { title: 'Крипто-босс',  threshold: 160, icon: '👑' },
+  novice: { title: 'Новичок', threshold: 0, icon: '🌱' },
+  megagood: { title: 'Мегахорош', threshold: 40, icon: '💪' },
+  almostpro: { title: 'ПочтиПрофи', threshold: 80, icon: '⚡' },
+  arbitrager: { title: 'Арбитражник', threshold: 120, icon: '🎯' },
+  cryptoboss: { title: 'Крипто-босс', threshold: 160, icon: '👑' },
 };
 
 function computeXP(completedCount: number, ach: Record<AchievementKey, boolean>) {
@@ -59,12 +59,12 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   const next = order[idx + 1];
   if (!next) return { key: current, nextAt: null, progressPct: 100 };
   const from = LEVELS[current].threshold;
-  const to   = LEVELS[next].threshold;
-  const pct  = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
+  const to = LEVELS[next].threshold;
+  const pct = Math.max(0, Math.min(100, Math.round(((xp - from) / (to - from)) * 100)));
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* uid общий — оставляем только для presence */
+/* uid общий — оставляем только для presence (на будущее, если потребуется) */
 const UID_KEY = 'presence_uid';
 function getClientUid(): string {
   try {
@@ -73,105 +73,125 @@ function getClientUid(): string {
     const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
     localStorage.setItem(UID_KEY, gen);
     return gen;
-  } catch { return 'anonymous'; }
+  } catch {
+    return 'anonymous';
+  }
 }
 
-/* user-scoped localStorage — используем tg id, если есть */
+/* ───── user-scoped localStorage (Telegram id если есть) ───── */
 function getTgIdSync(): string | null {
   try {
     const wa = (window as any)?.Telegram?.WebApp;
     const id = wa?.initDataUnsafe?.user?.id;
     return (id ?? null)?.toString?.() ?? null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 function ns(key: string): string {
   const id = getTgIdSync();
   return id ? `${key}:tg_${id}` : `${key}:anon`;
 }
 
+/** Имя/ник из Telegram */
+function readTgName(): string | null {
+  try {
+    const user = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (!user) return null;
+    const first = user.first_name?.toString?.();
+    const last = user.last_name?.toString?.();
+    const username = user.username?.toString?.();
+    return first || username || (first && last ? `${first} ${last}` : null) || null;
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const router = useRouter();
 
   const [firstName, setFirstName] = useState<string | null>(null);
-
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
   const [quote, setQuote] = useState<string>('');
 
   const [achievements, setAchievements] = useState<Record<AchievementKey, boolean>>({
-    first: false, unlock: false, fear: false, errors: false, arbitrager: false
+    first: false,
+    unlock: false,
+    fear: false,
+    errors: false,
+    arbitrager: false,
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  // ждём готовности auth (RLS JWT) — UI не блокируем
+  // ждём RLS/JWT перед чтением прогресса (но UI не блокируем)
   const [authReady, setAuthReady] = useState(false);
 
-  /* Инициализация Supabase (tg-auth) + опциональный редирект на /admin по start-параметру */
+  /* ───── Инициализация auth (tg-auth). Никаких "барьеров", просто стараемся получить JWT. ───── */
   useEffect(() => {
     let stop = false;
-
     (async () => {
       try {
         await initSupabaseFromTelegram();
       } catch (e) {
-        console.warn('auth init failed', e);
+        // вне Telegram или не успело — это нормально, пойдём по локальному кэшу
+        // eslint-disable-next-line no-console
+        console.warn('auth init skipped/fallback', e);
       } finally {
         if (!stop) setAuthReady(true);
       }
     })();
-
-    // поддержка ?startapp=admin / ?tgWebAppStartParam=admin и #tgWebAppStartParam=admin (плюс проверка username)
-    function wantAdmin() {
-      const sp = new URLSearchParams(window.location.search);
-      const s1 = (sp.get('startapp') || '').toLowerCase();
-      const s2 = (sp.get('tgWebAppStartParam') || '').toLowerCase();
-      let s3 = '';
-      if (location.hash.startsWith('#')) {
-        try { s3 = new URLSearchParams(location.hash.slice(1)).get('tgWebAppStartParam') || ''; } catch {}
-      }
-      return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
-    }
-    (async () => {
-      for (let i = 0; i < 80 && !stop; i++) {
-        try {
-          const wa = (window as any)?.Telegram?.WebApp;
-          const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
-          const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
-          const asked     = wantAdmin() || startParm === 'admin';
-          if (username === 'marselv1' && asked) {
-            window.location.replace('/admin');
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
-      }
-    })();
-
-    return () => { stop = true; };
+    return () => {
+      stop = true;
+    };
   }, []);
 
-  /* Имя пользователя — берём из Telegram WebApp, без блокировок; fallback: «Друг» */
+  /* ───── Имя пользователя: быстро берём из кэша, затем дожидаемся Telegram и обновляем ───── */
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      for (let i = 0; i < 40 && !cancelled; i++) { // ~4s попыток схватить WebApp
-        try {
-          const wa = (window as any)?.Telegram?.WebApp;
-          const name = wa?.initDataUnsafe?.user?.first_name;
-          if (typeof name === 'string' && name.length > 0) {
-            if (!cancelled) setFirstName(name);
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
+
+    const setName = (name: string) => {
+      if (cancelled) return;
+      setFirstName(name);
+      try {
+        localStorage.setItem(ns('first_name'), name);
+      } catch {}
+    };
+
+    const run = async () => {
+      // 1) быстрый кэш (мгновенная отрисовка)
+      try {
+        const cached = localStorage.getItem(ns('first_name'));
+        if (cached) setFirstName(cached);
+      } catch {}
+
+      // 2) попытаться дождаться Telegram WebApp (до ~4.5с)
+      for (let i = 0; i < 45 && !cancelled; i++) {
+        const name = readTgName();
+        if (name && name.length > 0) {
+          setName(name);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 100));
       }
-      if (!cancelled) setFirstName('Друг');
-    })();
-    return () => { cancelled = true; };
+
+      // 3) если так и не дождались — ставим кэш или "Друг"
+      try {
+        const cached = localStorage.getItem(ns('first_name'));
+        setName(cached || 'Друг');
+      } catch {
+        setName('Друг');
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /* уроки */
+  /* ───── Уроки (из БД, с fallback) ───── */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -188,9 +208,11 @@ export default function Home() {
           4: '5 ошибок новичков, которые убивают заработок',
           5: 'Финал: твой первый шаг в мир крипты',
         };
-        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
+        const patched = mapped.map((m) => (names[m.id] ? { ...m, title: names[m.id] } : m));
         setLessons(patched);
-        try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
+        try {
+          localStorage.setItem('lessons_cache', JSON.stringify(patched));
+        } catch {}
       } catch {
         setLessons([
           { id: 1, title: 'Крипта без сложных слов: что это и зачем тебе' },
@@ -202,15 +224,20 @@ export default function Home() {
         ]);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  /* цитата */
+  /* ───── Цитата дня ───── */
   useEffect(() => {
     (async () => {
       try {
         const q = await getRandomDailyQuote();
-        if (q) { setQuote(q); return; }
+        if (q) {
+          setQuote(q);
+          return;
+        }
       } catch {}
       try {
         const saved = JSON.parse(localStorage.getItem('admin_quotes') || '[]');
@@ -222,7 +249,7 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс (ждём authReady → сначала из БД (RLS), иначе — из user-scoped LS) */
+  /* ───── Прогресс: ждём authReady → сначала пробуем БД (RLS), иначе — user-scoped localStorage ───── */
   useEffect(() => {
     if (!authReady) return;
     (async () => {
@@ -234,7 +261,9 @@ export default function Home() {
             status: r.status === 'completed' ? 'completed' : 'pending',
           }));
           setProgress(arr);
-          try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
+          try {
+            localStorage.setItem(ns('progress'), JSON.stringify(arr));
+          } catch {}
         } else {
           const raw = localStorage.getItem(ns('progress'));
           if (raw) setProgress(JSON.parse(raw) as Progress[]);
@@ -255,39 +284,79 @@ export default function Home() {
     })();
   }, [authReady]);
 
-  /* авто-обновление при возврате */
+  /* ───── Авто-обновление при возврате во вкладку (подхватываем локальные изменения) ───── */
   useEffect(() => {
-    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
+    const refresh = () => {
+      try {
+        const raw = localStorage.getItem(ns('progress'));
+        if (raw) setProgress(JSON.parse(raw));
+      } catch {}
+    };
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
-    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
+    return () => {
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVis);
+    };
   }, []);
 
-  /* сохраняем и считаем ачивки */
+  /* ───── Считаем ачивки, сохраняем прогресс и синкаем в БД ───── */
   useEffect(() => {
     if (!progressLoaded) return;
+
     const next = { ...achievements };
-    const _isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+    const _isCompleted = (id: number) => progress.find((p) => p.lesson_id === id)?.status === 'completed';
     if (_isCompleted(1)) next.first = true;
     if (_isCompleted(2)) next.unlock = true;
     if (_isCompleted(3)) next.fear = true;
     if (_isCompleted(4)) next.errors = true;
-    const finishedCount = progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
+    const finishedCount = progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length;
     if (finishedCount === CORE_LESSONS_COUNT) next.arbitrager = true;
 
     setAchievements(next);
-    try { localStorage.setItem(ns('achievements'), JSON.stringify(next)); } catch {}
+    try {
+      localStorage.setItem(ns('achievements'), JSON.stringify(next));
+    } catch {}
 
     const finished = finishedCount === CORE_LESSONS_COUNT;
     setAllCompleted(finished);
-    try { localStorage.setItem(ns('all_completed'), finished ? 'true' : 'false'); } catch {}
+    try {
+      localStorage.setItem(ns('all_completed'), finished ? 'true' : 'false');
+    } catch {}
 
-    try { localStorage.setItem(ns('progress'), JSON.stringify(progress)); } catch {}
-    (async () => { try { await saveUserProgress(progress); } catch {} })();
-  }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    try {
+      localStorage.setItem(ns('progress'), JSON.stringify(progress));
+    } catch {}
 
-  /* компактная «рамка» уровня */
+    (async () => {
+      try {
+        await saveUserProgress(progress);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, progressLoaded]);
+
+  /* ───── Вычисления для UI ───── */
+  const isCompleted = (id: number) => progress.find((p) => p.lesson_id === id)?.status === 'completed';
+  const completedCount = useMemo(
+    () => progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    [progress]
+  );
+  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+  const points = completedCount * POINTS_PER_LESSON;
+
+  const xp = computeXP(completedCount, achievements);
+  const { key: levelKey, progressPct } = computeLevel(xp);
+  const level = LEVELS[levelKey];
+
+  const checkpoints = useMemo(
+    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
+    []
+  );
+  const coreLessons = useMemo(() => lessons.filter((l) => l.id <= CORE_LESSONS_COUNT), [lessons]);
+
+  /* ───── Компактная «рамка» уровня ───── */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
     return (
@@ -312,26 +381,6 @@ export default function Home() {
     );
   };
 
-  /* вычисления для UI */
-  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
-  const completedCount = useMemo(
-    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
-    [progress]
-  );
-  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
-  const points    = completedCount * POINTS_PER_LESSON;
-
-  const xp = computeXP(completedCount, achievements);
-  const { key: levelKey, progressPct } = computeLevel(xp);
-  const level = LEVELS[levelKey];
-
-  const checkpoints = useMemo(
-    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
-    []
-  );
-  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
-
-  // ⬇️ Всегда рендерим контент (никаких блокировок «открой в Telegram»)
   return (
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
@@ -345,16 +394,24 @@ export default function Home() {
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"
-          style={{ boxShadow: 'var(--shadow)', borderLeftWidth: '4px', borderLeftColor: 'var(--brand)', background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)' }}
+          style={{
+            boxShadow: 'var(--shadow)',
+            borderLeftWidth: '4px',
+            borderLeftColor: 'var(--brand)',
+            background: 'color-mix(in oklab, var(--surface-2) 85%, transparent)',
+          }}
         >
-          <span className="mr-1">“</span>{quote}<span className="ml-1">”</span>
+          <span className="mr-1">“</span>
+          {quote}
+          <span className="ml-1">”</span>
         </blockquote>
 
         {/* очки + уровень */}
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-3 py-1.5 w-full justify-center text-xs">
-              <span>🏆</span><span className="font-semibold">{points} очк.</span>
+              <span>🏆</span>
+              <span className="font-semibold">{points} очк.</span>
             </div>
           </div>
           <ChipRing pct={progressPct}>
@@ -368,11 +425,17 @@ export default function Home() {
           <div className="relative h-2 rounded-full bg-[var(--surface-2)] border border-[var(--border)] overflow-hidden w-full">
             <div className="absolute inset-y-0 left-0 bg-[var(--brand)]" style={{ width: `${coursePct}%` }} />
             {checkpoints.map((p, i) => (
-              <div key={i} className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]" style={{ left: `calc(${p}% - 4px)` }} />
+              <div
+                key={i}
+                className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]"
+                style={{ left: `calc(${p}% - 4px)` }}
+              />
             ))}
           </div>
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-            <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
+            <span>
+              Пройдено: {completedCount}/{CORE_LESSONS_COUNT}
+            </span>
             <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
           </div>
         </div>
@@ -385,19 +448,21 @@ export default function Home() {
             { key: 'fear' as const, icon: '🛡️', label: 'Победил страхи' },
             { key: 'errors' as const, icon: '✅', label: 'Ошибки повержены' },
             { key: 'arbitrager' as const, icon: '🎯', label: 'Арбитражник' },
-          ].map(a => {
+          ].map((a) => {
             const active = achievements[a.key];
             return (
               <div key={a.key} className="w-full">
                 <div
-                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-9 ${active ? '' : 'opacity-55'}`}
+                  className={`w-full px-3 rounded-full border flex items-center justify-center gap-1 h-9 ${
+                    active ? '' : 'opacity-55'
+                  }`}
                   style={{ borderColor: 'var(--border)', background: 'var(--surface-2)' }}
                 >
                   <span className="text-sm shrink-0">{a.icon}</span>
                   <span
                     className="font-medium text-center leading-[1.1] break-words overflow-hidden
                                [font-size:clamp(12px,3.1vw,14px)]"
-                    style={{ display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical' }}
+                    style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
                   >
                     {a.label}
                   </span>
@@ -414,14 +479,23 @@ export default function Home() {
         <div className="space-y-3 w-full">
           {coreLessons.map((l, idx) => {
             const done = isCompleted(l.id);
-            const mins = ({1:7,2:9,3:8,4:6,5:10} as Record<number, number>)[l.id] ?? 6;
+            const mins = ({ 1: 7, 2: 9, 3: 8, 4: 6, 5: 10 } as Record<number, number>)[l.id] ?? 6;
             return (
-              <div key={l.id} className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]">
+              <div
+                key={l.id}
+                className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-[0_1px_12px_rgba(0,0,0,.12)]"
+              >
                 <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
-                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">{ICONS[l.id] ?? '📘'}</div>
+                  <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
+                    {ICONS[l.id] ?? '📘'}
+                  </div>
                   <div className="min-w-0 w-full">
-                    <div className="text-[17px] font-semibold leading-tight break-words">Урок {idx + 1}. {l.title}</div>
-                    <div className="text-[13px] text-[var(--muted)] mt-1">{mins} мин • Статус: {done ? 'пройден' : 'не начат'}</div>
+                    <div className="text-[17px] font-semibold leading-tight break-words">
+                      Урок {idx + 1}. {l.title}
+                    </div>
+                    <div className="text-[13px] text-[var(--muted)] mt-1">
+                      {mins} мин • Статус: {done ? 'пройден' : 'не начат'}
+                    </div>
                     <button
                       className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
                       onClick={() => router.push(`/lesson/${l.id}`)}
@@ -437,11 +511,15 @@ export default function Home() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">
+          Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)
+        </p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
-            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">📚</div>
+            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
+              📚
+            </div>
             <div className="w-full">
               <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
               <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
@@ -451,7 +529,7 @@ export default function Home() {
                 disabled={!allCompleted}
                 title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}
               >
-                {allCompleted ? 'Откроется' : 'Откроется после курса'}
+                {allCompleted ? 'Открыть' : 'Откроется после курса'}
               </button>
             </div>
           </div>

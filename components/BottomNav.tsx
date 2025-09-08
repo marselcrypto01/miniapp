@@ -4,9 +4,20 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-/** Простое неймспейс-префиксирование (без Telegram id) */
+/** user-scoped localStorage namespace */
+function getTgIdSync(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch {
+    return null;
+  }
+}
 function ns(key: string): string {
-  return `${key}:anon`;
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
 }
 
 export default function BottomNav() {
@@ -62,6 +73,7 @@ export default function BottomNav() {
       className="fixed left-0 right-0 bottom-0 z-50 mx-auto"
       style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}
     >
+      {/* этот див — тот самый контейнер, по нему выравниваемся */}
       <div data-mainbar-inner className="mx-auto max-w-[var(--content-max)] px-4">
         <div className="glass flex items-center justify-between rounded-[16px] px-2">
           <Item href="/" label="Главная" icon="🏠" />

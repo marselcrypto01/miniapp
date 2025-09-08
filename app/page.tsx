@@ -15,6 +15,7 @@ import {
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
+type Env = 'loading' | 'telegram' | 'browser';
 
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON  = 100;
@@ -64,12 +65,33 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* user-scoped localStorage без Telegram id */
-function ns(key: string): string {
-  return `${key}:anon`;
+/* uid общий — оставляем только для presence */
+const UID_KEY = 'presence_uid';
+function getClientUid(): string {
+  try {
+    const from = localStorage.getItem(UID_KEY);
+    if (from) return from;
+    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    localStorage.setItem(UID_KEY, gen);
+    return gen;
+  } catch { return 'anonymous'; }
 }
 
-/* Локальный хелпер: взять имя из Telegram WebApp, если доступно */
+/* ───── user-scoped localStorage (с пробросом tg id, если доступен) ───── */
+function getTgIdSync(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wa = (window as any)?.Telegram?.WebApp;
+    const id = wa?.initDataUnsafe?.user?.id;
+    return (id ?? null)?.toString?.() ?? null;
+  } catch { return null; }
+}
+function ns(key: string): string {
+  const id = getTgIdSync();
+  return id ? `${key}:tg_${id}` : `${key}:anon`;
+}
+
+/* Имя из Telegram, если SDK доступен; иначе null */
 function getTgDisplayNameSync(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,16 +99,16 @@ function getTgDisplayNameSync(): string | null {
     if (!u) return null;
     const name = u.first_name || u.username || u.last_name || '';
     return name ? String(name) : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 export default function Home() {
   const router = useRouter();
 
-  // Имя: пытаемся взять из Telegram, иначе — «Друг»
   const [firstName, setFirstName] = useState<string | null>(getTgDisplayNameSync() ?? 'Друг');
+
+  // env больше не используется для блокировки UI, но оставим тип для совместимости
+  const [_env, _setEnv] = useState<Env>('telegram');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -98,20 +120,65 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  /* ───────────────────── Быстрый старт ─────────────────────
-     Авторизацию инициируем в фоне (реальный tg-auth, если есть initData; иначе — гость).
-     UI ничего не ждёт. */
+  // флаг готовности auth, чтобы сначала получить JWT, а потом читать прогресс
+  const [authReady, setAuthReady] = useState(false);
+
+  /* Инициализируем Supabase (tg-auth/гость) и редирект в /admin по start-параметру */
   useEffect(() => {
-    initSupabaseFromTelegram().catch(() => {});
+    let stop = false;
+
+    (async () => {
+      try {
+        await initSupabaseFromTelegram(); // не блокирует UI
+      } catch (e) {
+        console.warn('auth init failed', e);
+      } finally {
+        if (!stop) setAuthReady(true);
+      }
+    })();
+
+    function wantAdmin() {
+      const sp = new URLSearchParams(window.location.search);
+      const s1 = (sp.get('startapp') || '').toLowerCase();
+      const s2 = (sp.get('tgWebAppStartParam') || '').toLowerCase();
+      let s3 = '';
+      if (location.hash.startsWith('#')) {
+        try { s3 = new URLSearchParams(location.hash.slice(1)).get('tgWebAppStartParam') || ''; } catch {}
+      }
+      return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
+    }
+
+    // мгновенный редирект, если явно просят админку
+    if (wantAdmin()) {
+      window.location.replace('/admin');
+    } else {
+      // необязательная проверка username, если Telegram SDK доступен
+      (async () => {
+        for (let i = 0; i < 80 && !stop; i++) {
+          try {
+            // @ts-ignore
+            const wa = (window as any)?.Telegram?.WebApp;
+            const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
+            const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
+            const asked     = wantAdmin() || startParm === 'admin';
+            if (username === 'marselv1' && asked) {
+              window.location.replace('/admin');
+              return;
+            }
+          } catch {}
+          await new Promise(r => setTimeout(r, 100));
+        }
+      })();
+    }
+
+    // если позже появится Telegram SDK — обновим имя
+    const laterName = getTgDisplayNameSync();
+    if (laterName) setFirstName(laterName);
+
+    return () => { stop = true; };
   }, []);
 
-  /* Если SDK Telegram станет доступен позже — обновим имя */
-  useEffect(() => {
-    const n = getTgDisplayNameSync();
-    if (n) setFirstName(n);
-  }, []);
-
-  /* Уроки — из БД, с fallback на дефолт */
+  /* уроки */
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -128,7 +195,7 @@ export default function Home() {
           4: '5 ошибок новичков, которые убивают заработок',
           5: 'Финал: твой первый шаг в мир крипты',
         };
-        const patched = mapped.map(m => (names[m.id] ? { ...m, title: names[m.id] } : m));
+        const patched = mapped.map(m => names[m.id] ? { ...m, title: names[m.id] } : m);
         setLessons(patched);
         try { localStorage.setItem('lessons_cache', JSON.stringify(patched)); } catch {}
       } catch {
@@ -145,7 +212,7 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
 
-  /* Цитата — без ожиданий */
+  /* цитата */
   useEffect(() => {
     (async () => {
       try {
@@ -162,16 +229,12 @@ export default function Home() {
     })();
   }, []);
 
-  /* Прогресс — сначала из LS (мгновенно), затем мягко пытаемся подтянуть из БД */
+  /* прогресс (ждём authReady → сначала из БД (RLS), иначе — из user-scoped LS) */
   useEffect(() => {
+    if (!authReady) return;
     (async () => {
       try {
-        const raw = localStorage.getItem(ns('progress'));
-        if (raw) setProgress(JSON.parse(raw) as Progress[]);
-      } catch {}
-
-      try {
-        const rows = await getUserProgress(); // если RLS не готов — вернётся пусто/упадёт
+        const rows = await getUserProgress();
         if (rows?.length) {
           const arr: Progress[] = rows.map((r: any) => ({
             lesson_id: Number(r.lesson_id),
@@ -179,8 +242,14 @@ export default function Home() {
           }));
           setProgress(arr);
           try { localStorage.setItem(ns('progress'), JSON.stringify(arr)); } catch {}
+        } else {
+          const raw = localStorage.getItem(ns('progress'));
+          if (raw) setProgress(JSON.parse(raw) as Progress[]);
         }
-      } catch {}
+      } catch {
+        const raw = localStorage.getItem(ns('progress'));
+        if (raw) setProgress(JSON.parse(raw) as Progress[]);
+      }
 
       try {
         const ach = localStorage.getItem(ns('achievements'));
@@ -191,31 +260,20 @@ export default function Home() {
 
       setProgressLoaded(true);
     })();
+  }, [authReady]);
+
+  /* авто-обновление при возврате */
+  useEffect(() => {
+    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
+    window.addEventListener('focus', refresh);
+    const onVis = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
-  /* Расчёты/метрики */
-  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
-  const completedCount = useMemo(
-    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
-    [progress]
-  );
-  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
-  const points    = completedCount * POINTS_PER_LESSON;
-
-  const xp = computeXP(completedCount, achievements);
-  const { key: levelKey, progressPct } = computeLevel(xp);
-  const level = LEVELS[levelKey];
-
-  const checkpoints = useMemo(
-    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
-    []
-  );
-  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
-
-  /* Сохранение прогресса/ачивок (асинхронно, не блокируя) */
+  /* сохраняем и считаем ачивки */
   useEffect(() => {
     if (!progressLoaded) return;
-
     const next = { ...achievements };
     const _isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
     if (_isCompleted(1)) next.first = true;
@@ -260,6 +318,24 @@ export default function Home() {
       </div>
     );
   };
+
+  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+  const completedCount = useMemo(
+    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    [progress]
+  );
+  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+  const points    = completedCount * POINTS_PER_LESSON;
+
+  const xp = computeXP(completedCount, achievements);
+  const { key: levelKey, progressPct } = computeLevel(xp);
+  const level = LEVELS[levelKey];
+
+  const checkpoints = useMemo(
+    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
+    []
+  );
+  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   return (
     <main className={`${WRAP} py-4`}>
@@ -366,7 +442,7 @@ export default function Home() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков и бирж)</p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
@@ -387,7 +463,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ */}
+      {/* FAQ — вернул полностью */}
       <section className="w-full mt-6">
         <h2 className="text-xl font-bold mb-3">📌 FAQ</h2>
 

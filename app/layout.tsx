@@ -2,7 +2,6 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
-import Script from 'next/script';
 import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
 
@@ -43,72 +42,74 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://telegram.org" crossOrigin="" />
         <link rel="dns-prefetch" href="https://telegram.org" />
 
-        {/* SDK Телеграма НЕ блокируем рендер */}
-        <Script
-          src="https://telegram.org/js/telegram-web-app.js"
-          strategy="afterInteractive"
-          onError={() => {/* игнор — продолжим без SDK*/}}
+        {/* ✅ Telegram SDK без next/script, без обработчиков, с defer */}
+        <script src="https://telegram.org/js/telegram-web-app.js" defer />
+
+        {/* ✅ Fallback: мягкая инициализация, если SDK долго грузится */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(){
+                var started = false;
+                function safeStart(){
+                  if (started) return;
+                  started = true;
+                  try {
+                    var wa = window.Telegram && window.Telegram.WebApp;
+                    if (wa && typeof wa.ready === 'function') wa.ready();
+                  } catch(e){}
+                }
+                // если SDK не инициализировался за 5 секунд — не стопорим UI
+                setTimeout(safeStart, 5000);
+              })();
+            `,
+          }}
         />
 
-
-
-        {/* Fallback: если SDK долго грузится (мобильная сеть), мягко продолжаем инициализацию */}
-        <Script id="wa-fallback" strategy="afterInteractive">{`
-          (function(){
-            var started = false;
-            function safeStart(){
-              if (started) return;
-              started = true;
-              try {
-                var wa = window.Telegram && window.Telegram.WebApp;
-                if (wa && typeof wa.ready === 'function') wa.ready();
-              } catch(e){}
-            }
-            // если SDK не инициализировался за 5 секунд — не стопорим UI
-            setTimeout(safeStart, 5000);
-          })();
-        `}</Script>
-
-        {/* Мягкий автопереход в /admin: только при старте по ?startapp=admin и только для @marselv1 */}
-        <Script id="admin-redirect" strategy="afterInteractive">{`
-          (function () {
-            try {
-              function getStartFlag() {
-                var sp  = new URLSearchParams(location.search);
-                var a1  = (sp.get('startapp') || '').toLowerCase();
-                var a2  = (sp.get('tgWebAppStartParam') || '').toLowerCase();
-
-                var hash = location.hash || '';
-                var h = '';
-                if (hash.startsWith('#')) {
-                  try { h = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch (e) {}
-                }
-                return (a1 === 'admin') || (a2 === 'admin') || (h && h.toLowerCase() === 'admin');
-              }
-
-              var tries = 0;
-              function tick() {
+        {/* ✅ Мягкий автопереход в /admin (только для @marselv1 и если startapp=admin) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
                 try {
-                  var wa = window.Telegram && window.Telegram.WebApp;
-                  if (wa && typeof wa.ready === 'function') { try { wa.ready(); } catch(e){} }
+                  function getStartFlag() {
+                    var sp  = new URLSearchParams(location.search);
+                    var a1  = (sp.get('startapp') || '').toLowerCase();
+                    var a2  = (sp.get('tgWebAppStartParam') || '').toLowerCase();
 
-                  var username   = wa && wa.initDataUnsafe && wa.initDataUnsafe.user && wa.initDataUnsafe.user.username;
-                  var startParam = wa && wa.initDataUnsafe && (wa.initDataUnsafe.start_param || wa.initDataUnsafe.startapp);
-                  var startOk    = getStartFlag() || (typeof startParam === 'string' && startParam.toLowerCase() === 'admin');
-                  var isAdmin    = username && username.toLowerCase && username.toLowerCase() === 'marselv1';
-
-                  if (isAdmin && startOk && location.pathname !== '/admin') {
-                    location.replace('/admin');
-                    return;
+                    var hash = location.hash || '';
+                    var h = '';
+                    if (hash.startsWith('#')) {
+                      try { h = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch (e) {}
+                    }
+                    return (a1 === 'admin') || (a2 === 'admin') || (h && h.toLowerCase() === 'admin');
                   }
-                } catch (e) {}
 
-                if (++tries < 80) setTimeout(tick, 100); // ждём initData до ~8с
-              }
-              tick();
-            } catch (e) {}
-          })();
-        `}</Script>
+                  var tries = 0;
+                  function tick() {
+                    try {
+                      var wa = window.Telegram && window.Telegram.WebApp;
+                      if (wa && typeof wa.ready === 'function') { try { wa.ready(); } catch(e){} }
+
+                      var username   = wa && wa.initDataUnsafe && wa.initDataUnsafe.user && wa.initDataUnsafe.user.username;
+                      var startParam = wa && wa.initDataUnsafe && (wa.initDataUnsafe.start_param || wa.initDataUnsafe.startapp);
+                      var startOk    = getStartFlag() || (typeof startParam === 'string' && startParam.toLowerCase() === 'admin');
+                      var isAdmin    = username && username.toLowerCase && username.toLowerCase() === 'marselv1';
+
+                      if (isAdmin && startOk && location.pathname !== '/admin') {
+                        location.replace('/admin');
+                        return;
+                      }
+                    } catch (e) {}
+
+                    if (++tries < 80) setTimeout(tick, 100); // ждём initData до ~8с
+                  }
+                  tick();
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
 
       <body

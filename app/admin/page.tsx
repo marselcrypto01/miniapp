@@ -5,6 +5,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PresenceClient from '@/components/PresenceClient';
 import { createClient } from '@supabase/supabase-js';
 import { initSupabaseFromTelegram } from '@/lib/db';
+export const dynamic = 'force-dynamic';
+
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 

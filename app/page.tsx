@@ -15,7 +15,6 @@ import {
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
-type Env = 'loading' | 'telegram' | 'browser';
 
 const CORE_LESSONS_COUNT = 5;
 const POINTS_PER_LESSON  = 100;
@@ -65,19 +64,7 @@ function computeLevel(xp: number): { key: LevelKey; nextAt: number | null; progr
   return { key: current, nextAt: to, progressPct: pct };
 }
 
-/* uid общий — оставляем только для presence */
-const UID_KEY = 'presence_uid';
-function getClientUid(): string {
-  try {
-    const from = localStorage.getItem(UID_KEY);
-    if (from) return from;
-    const gen = Math.random().toString(36).slice(2) + Date.now().toString(36);
-    localStorage.setItem(UID_KEY, gen);
-    return gen;
-  } catch { return 'anonymous'; }
-}
-
-/* ───── user-scoped localStorage (с пробросом tg id, если доступен) ───── */
+/* user-scoped localStorage (если есть tg id — ключи будут per-user) */
 function getTgIdSync(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -91,14 +78,13 @@ function ns(key: string): string {
   return id ? `${key}:tg_${id}` : `${key}:anon`;
 }
 
-/* Имя из Telegram, если SDK доступен; иначе null */
+/* имя из Telegram (если доступно) */
 function getTgDisplayNameSync(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const u = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
     if (!u) return null;
-    const name = u.first_name || u.username || u.last_name || '';
-    return name ? String(name) : null;
+    return (u.first_name || u.username || u.last_name || '') || null;
   } catch { return null; }
 }
 
@@ -106,9 +92,6 @@ export default function Home() {
   const router = useRouter();
 
   const [firstName, setFirstName] = useState<string | null>(getTgDisplayNameSync() ?? 'Друг');
-
-  // env больше не используется для блокировки UI, но оставим тип для совместимости
-  const [_env, _setEnv] = useState<Env>('telegram');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -120,17 +103,18 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  // флаг готовности auth, чтобы сначала получить JWT, а потом читать прогресс
+  // ждём авторизацию (RLS JWT), но UI не блокируем
   const [authReady, setAuthReady] = useState(false);
 
-  /* Инициализируем Supabase (tg-auth/гость) и редирект в /admin по start-параметру */
+  /* Инициализация Supabase (tg-auth) + опциональный редирект в /admin */
   useEffect(() => {
     let stop = false;
 
     (async () => {
       try {
-        await initSupabaseFromTelegram(); // не блокирует UI
+        await initSupabaseFromTelegram();
       } catch (e) {
+        // не блокируем UI — просто будем работать из LS
         console.warn('auth init failed', e);
       } finally {
         if (!stop) setAuthReady(true);
@@ -148,15 +132,14 @@ export default function Home() {
       return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
     }
 
-    // мгновенный редирект, если явно просят админку
     if (wantAdmin()) {
       window.location.replace('/admin');
     } else {
-      // необязательная проверка username, если Telegram SDK доступен
+      // если Telegram доступен и запрошен старт admin юзером marselv1 — тоже редирект
       (async () => {
         for (let i = 0; i < 80 && !stop; i++) {
           try {
-            // @ts-ignore
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const wa = (window as any)?.Telegram?.WebApp;
             const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
             const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
@@ -172,8 +155,8 @@ export default function Home() {
     }
 
     // если позже появится Telegram SDK — обновим имя
-    const laterName = getTgDisplayNameSync();
-    if (laterName) setFirstName(laterName);
+    const later = getTgDisplayNameSync();
+    if (later) setFirstName(later);
 
     return () => { stop = true; };
   }, []);
@@ -229,7 +212,7 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс (ждём authReady → сначала из БД (RLS), иначе — из user-scoped LS) */
+  /* прогресс (ждём authReady → сначала из БД, иначе — из user-scoped LS) */
   useEffect(() => {
     if (!authReady) return;
     (async () => {
@@ -294,6 +277,25 @@ export default function Home() {
     (async () => { try { await saveUserProgress(progress); } catch {} })();
   }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // вычисления для UI
+  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
+  const completedCount = useMemo(
+    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
+    [progress]
+  );
+  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
+  const points    = completedCount * POINTS_PER_LESSON;
+
+  const xp = computeXP(completedCount, achievements);
+  const { key: levelKey, progressPct } = computeLevel(xp);
+  const level = LEVELS[levelKey];
+
+  const checkpoints = useMemo(
+    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
+    []
+  );
+  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
+
   /* компактная «рамка» уровня */
   const ChipRing: React.FC<{ pct: number; children: React.ReactNode }> = ({ pct, children }) => {
     const clamped = Math.max(0, Math.min(100, pct));
@@ -318,24 +320,6 @@ export default function Home() {
       </div>
     );
   };
-
-  const isCompleted = (id: number) => progress.find(p => p.lesson_id === id)?.status === 'completed';
-  const completedCount = useMemo(
-    () => progress.filter(p => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
-    [progress]
-  );
-  const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
-  const points    = completedCount * POINTS_PER_LESSON;
-
-  const xp = computeXP(completedCount, achievements);
-  const { key: levelKey, progressPct } = computeLevel(xp);
-  const level = LEVELS[levelKey];
-
-  const checkpoints = useMemo(
-    () => Array.from({ length: CORE_LESSONS_COUNT }, (_, i) => (i + 1) * (100 / CORE_LESSONS_COUNT)),
-    []
-  );
-  const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
   return (
     <main className={`${WRAP} py-4`}>
@@ -442,7 +426,9 @@ export default function Home() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">
+          Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)
+        </p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
@@ -463,7 +449,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ — вернул полностью */}
+      {/* FAQ */}
       <section className="w-full mt-6">
         <h2 className="text-xl font-bold mb-3">📌 FAQ</h2>
 

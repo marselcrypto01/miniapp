@@ -1,43 +1,44 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTelegramUser } from '@/lib/useTelegramUser';
-import { initSupabaseFromTelegram, createLead } from '@/lib/db';
+import { useEffect, useMemo, useState } from 'react';
+import { createLead, initSupabaseFromTelegram } from '@/lib/db';
 
 export default function ConsultPage() {
-  const { userData } = useTelegramUser();
-  
-  // Отладочная информация
-  console.log('Consult page - Telegram data:', userData);
-  
   // Инициализация (не блокирует форму)
   useEffect(() => {
     initSupabaseFromTelegram().catch(() => {});
   }, []);
 
-  // Поля формы с автозаполнением из Telegram
-  const [name, setName] = useState('');
-  const [tgNick, setTgNick] = useState('');
+  // Автоподстановка из Telegram
+  const tgUser = useMemo(() => {
+    try {
+      const wa = (window as any)?.Telegram?.WebApp;
+      const u = wa?.initDataUnsafe?.user;
+      if (!u) return null;
+      return {
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
+        username: u.username ? `@${u.username}` : '',
+      };
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Поля формы
+  const [name, setName] = useState(tgUser?.name ?? '');
+  const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // Обновляем поля формы, когда данные пользователя загружаются
-  useEffect(() => {
-    if (userData) {
-      setName(userData.firstName || '');
-      setTgNick(userData.username || '');
-    }
-  }, [userData]);
 
   async function handleSubmit() {
     if (loading) return;
 
     const msg =
       [
-        name || userData?.firstName ? `Имя: ${name || userData?.firstName}` : null,
-        tgNick || userData?.username ? `TG: ${tgNick || userData?.username}` : null,
+        name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
+        tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
         phone ? `Телефон: ${phone}` : null,
         time ? `Время: ${time}` : null,
         topic ? `Тема: ${topic}` : null,
@@ -49,8 +50,8 @@ export default function ConsultPage() {
       setLoading(true);
       await createLead({
         lead_type: 'consult',
-        name: name || userData?.firstName || undefined,
-        handle: tgNick || userData?.username || undefined,
+        name: name || tgUser?.name || undefined,
+        handle: tgNick || tgUser?.username || undefined,
         phone: phone || undefined,
         comment:
           [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`]
@@ -73,16 +74,6 @@ export default function ConsultPage() {
     <main className="mx-auto max-w-[var(--content-max)] px-4 py-5">
       <h1 className="text-3xl font-extrabold tracking-tight">Запись на консультацию</h1>
       <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
-
-      {/* Отладочная информация для разработки */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
-          <div>UserData: {userData ? JSON.stringify(userData) : 'null'}</div>
-          <div>Form values: name="{name}", tgNick="{tgNick}"</div>
-          <div>Hostname: {window.location.hostname}</div>
-          <div>NODE_ENV: {process.env.NODE_ENV}</div>
-        </div>
-      )}
 
       <div className="glass mt-4 rounded-[18px] p-4">
         <div className="grid gap-3">

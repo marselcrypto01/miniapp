@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
-import { useTelegramUser } from '@/lib/useTelegramUser';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 type FormatKey = 'group' | 'pro';
@@ -31,11 +30,6 @@ function ns(key: string): string {
 }
 
 export default function CoursesPage() {
-  const { userData } = useTelegramUser();
-  
-  // Отладочная информация
-  console.log('Courses page - Telegram data:', userData);
-  
   // Инициализация
   useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
 
@@ -46,6 +40,18 @@ export default function CoursesPage() {
 
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
+
+  const tgUser = useMemo(() => {
+    try {
+      const wa = (window as any)?.Telegram?.WebApp;
+      const u = wa?.initDataUnsafe?.user;
+      if (!u) return null;
+      return {
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
+        username: u.username ? `@${u.username}` : '',
+      };
+    } catch { return null; }
+  }, []);
 
   const formats: Record<FormatKey, {
     title: string; emoji: string; teaser: string; chips: string[];
@@ -99,15 +105,6 @@ export default function CoursesPage() {
         <p className="mt-2 text-sm text-[var(--muted)]">
           Два формата обучения. Коротко — в карточках, детали — по «Подробнее».
         </p>
-        
-        {/* Отладочная информация для разработки */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
-            <div>UserData: {userData ? JSON.stringify(userData) : 'null'}</div>
-            <div>Hostname: {window.location.hostname}</div>
-            <div>NODE_ENV: {process.env.NODE_ENV}</div>
-          </div>
-        )}
       </header>
 
       <section className="w-full space-y-3">
@@ -210,8 +207,8 @@ export default function CoursesPage() {
           title={formats[formOpen].title}
           onClose={() => setFormOpen(null)}
           locked={locked}
-          tgName={userData?.firstName || ''}
-          tgUsername={userData?.username || ''}
+          tgName={tgUser?.name || ''}
+          tgUsername={tgUser?.username || ''}
           onSubmit={async (payload) => {
             const msg = [
               `Формат: ${payload.format === 'group' ? 'Групповой' : 'Индивидуальный'}`,

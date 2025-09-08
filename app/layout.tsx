@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
+import Script from 'next/script'; // ← ЭТО НУЖНО
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -42,8 +43,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://telegram.org" crossOrigin="" />
         <link rel="dns-prefetch" href="https://telegram.org" />
 
-        {/* ✅ Telegram SDK без next/script, без обработчиков, с defer */}
-        <script src="https://telegram.org/js/telegram-web-app.js" defer />
+        {/* SDK Telegram — грузим ТОЛЬКО внутри Telegram WebView */}
+        <Script id="tg-sdk-loader" strategy="afterInteractive">
+          {`
+            (function () {
+              try {
+                var isTelegram = !!(window.Telegram && window.Telegram.WebApp);
+                // запасной признак: запуск из t.me/ или есть tgWebAppStartParam в URL/хэше
+                var sp  = new URLSearchParams(location.search);
+                var a1  = (sp.get('tgWebAppStartParam') || sp.get('startapp') || '').toLowerCase();
+                var hash = location.hash || '';
+                var a2 = '';
+                if (hash.startsWith('#')) { try { a2 = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch(e){} }
+                var looksLikeTelegram = isTelegram || a1 || a2;
+
+                if (!looksLikeTelegram) return; // вне Telegram — не грузим SDK
+
+                var s = document.createElement('script');
+                s.src = 'https://telegram.org/js/telegram-web-app.js';
+                s.async = true;
+                s.onerror = function(){ /* молча игнорируем */ };
+                document.head.appendChild(s);
+              } catch (e) {}
+            })();
+          `}
+        </Script>
+
+
 
         {/* ✅ Fallback: мягкая инициализация, если SDK долго грузится */}
         <script

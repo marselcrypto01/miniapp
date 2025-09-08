@@ -15,10 +15,9 @@ import {
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
 type AchievementKey = 'first' | 'unlock' | 'fear' | 'errors' | 'arbitrager';
-type Env = 'loading' | 'telegram' | 'browser';
 
 const CORE_LESSONS_COUNT = 5;
-const POINTS_PER_LESSON = 100;
+const POINTS_PER_LESSON  = 100;
 
 /** ширина = мини-бару через переменную */
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
@@ -77,24 +76,15 @@ function getClientUid(): string {
   } catch { return 'anonymous'; }
 }
 
-/* ───── NEW: user-scoped localStorage ───── */
-function getTgIdSync(): string | null {
-  try {
-    const wa = (window as any)?.Telegram?.WebApp;
-    const id = wa?.initDataUnsafe?.user?.id;
-    return (id ?? null)?.toString?.() ?? null;
-  } catch { return null; }
-}
+/* ───── user-scoped localStorage ───── */
 function ns(key: string): string {
-  const id = getTgIdSync();
-  return id ? `${key}:tg_${id}` : `${key}:anon`;
+  return `${key}:anon`; // без привязки к Telegram id
 }
 
 export default function Home() {
   const router = useRouter();
 
   const [firstName, setFirstName] = useState<string | null>(null);
-  const [env, setEnv] = useState<Env>('loading');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -106,15 +96,16 @@ export default function Home() {
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
 
-  // ✅ добавил флаг готовности auth, чтобы сначала получить JWT, а потом читать прогресс
+  // ✅ флаг готовности auth (получаем локальный/гостевой токен)
   const [authReady, setAuthReady] = useState(false);
 
-  /* Инициализируем Supabase (tg-auth) и страховочный редирект в /admin */
+  /* Инициализируем "авторизацию" (локально) и потенциальный редирект на /admin по start-параметру */
   useEffect(() => {
     let stop = false;
 
     (async () => {
       try {
+        // внутри этой функции у вас теперь должен вызываться локальный callTgAuth()
         await initSupabaseFromTelegram();
       } catch (e) {
         console.warn('auth init failed', e);
@@ -123,6 +114,7 @@ export default function Home() {
       }
     })();
 
+    // поддержка ?startapp=admin / ?tgWebAppStartParam=admin и #tgWebAppStartParam=admin
     function wantAdmin() {
       const sp = new URLSearchParams(window.location.search);
       const s1 = (sp.get('startapp') || '').toLowerCase();
@@ -133,23 +125,12 @@ export default function Home() {
       }
       return s1 === 'admin' || s2 === 'admin' || s3.toLowerCase() === 'admin';
     }
+    if (wantAdmin()) {
+      window.location.replace('/admin');
+    }
 
-    (async () => {
-      for (let i = 0; i < 80 && !stop; i++) {
-        try {
-          // @ts-ignore
-          const wa = (window as any)?.Telegram?.WebApp;
-          const username  = wa?.initDataUnsafe?.user?.username?.toLowerCase?.();
-          const startParm = (wa?.initDataUnsafe?.start_param || wa?.initDataUnsafe?.startapp)?.toLowerCase?.();
-          const asked     = wantAdmin() || startParm === 'admin';
-          if (username === 'marselv1' && asked) {
-            window.location.replace('/admin');
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
-      }
-    })();
+    // имя по умолчанию (без Telegram)
+    setFirstName('Друг');
 
     return () => { stop = true; };
   }, []);
@@ -172,37 +153,6 @@ export default function Home() {
     []
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
-
-  /* TG / demo (имя) */
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
-    let cancelled = false;
-    const detect = async () => {
-      for (let i = 0; i < 10; i++) {
-        const wa = (window as any)?.Telegram?.WebApp;
-        if (wa) {
-          try {
-            wa.ready(); wa.expand?.();
-            const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
-            if (!cancelled) {
-              if (hasInit || demo) {
-                setEnv('telegram');
-                const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
-                setFirstName(name);
-              } else setEnv('browser');
-            }
-            return;
-          } catch {}
-        }
-        await new Promise(r => setTimeout(r, 100));
-      }
-      if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
-      if (demo) setFirstName('Друг');
-    };
-    void detect();
-    return () => { cancelled = true; };
-  }, []);
 
   /* уроки */
   useEffect(() => {
@@ -255,7 +205,7 @@ export default function Home() {
     })();
   }, []);
 
-  /* прогресс (ждём authReady → сначала из БД (RLS), иначе — из user-scoped LS) */
+  /* прогресс (ждём authReady → сначала из БД, иначе — из user-scoped LS) */
   useEffect(() => {
     if (!authReady) return;
     (async () => {
@@ -345,18 +295,7 @@ export default function Home() {
     );
   };
 
-  if (env === 'loading') return null;
-  if (env === 'browser') {
-    return (
-      <main className={`flex h-screen items-center justify-center ${WRAP}`}>
-        <div className="glass p-6 text-center w-full">
-          <h1 className="text-xl font-semibold leading-tight">Открой приложение в Telegram</h1>
-          <p className="mt-2 text-sm text-[var(--muted)]">Ссылка с ботом откроет мини-приложение сразу.</p>
-        </div>
-      </main>
-    );
-  }
-
+  // ❌ Блок «Открой приложение в Telegram» удалён навсегда — всегда рендерим основное содержимое.
   return (
     <main className={`${WRAP} py-4`}>
       <PresenceClient page="home" activity="Главная" progressPct={coursePct} />
@@ -396,7 +335,6 @@ export default function Home() {
               <div key={i} className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full border border-[var(--border)]" style={{ left: `calc(${p}% - 4px)` }} />
             ))}
           </div>
-          {/* вернул прежний мелкий шрифт (11px) */}
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
             <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
             <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
@@ -484,7 +422,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* FAQ — вернул полностью */}
+      {/* FAQ */}
       <section className="w-full mt-6">
         <h2 className="text-xl font-bold mb-3">📌 FAQ</h2>
 

@@ -11,6 +11,7 @@ import {
   saveUserProgress,
   initSupabaseFromTelegram,
 } from '@/lib/db';
+import { useTelegramUser } from '@/lib/useTelegramUser';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
@@ -92,9 +93,7 @@ function ns(key: string): string {
 
 export default function Home() {
   const router = useRouter();
-
-  const [firstName, setFirstName] = useState<string | null>(null);
-  const [env, setEnv] = useState<Env>('loading');
+  const { userData, isLoading: telegramLoading, env } = useTelegramUser();
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [progress, setProgress] = useState<Progress[]>([]);
@@ -173,36 +172,6 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* TG / demo (имя) */
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const demo = params.get('demo') === '1' || process.env.NODE_ENV === 'development';
-    let cancelled = false;
-    const detect = async () => {
-      for (let i = 0; i < 10; i++) {
-        const wa = (window as any)?.Telegram?.WebApp;
-        if (wa) {
-          try {
-            wa.ready(); wa.expand?.();
-            const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
-            if (!cancelled) {
-              if (hasInit || demo) {
-                setEnv('telegram');
-                const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
-                setFirstName(name);
-              } else setEnv('browser');
-            }
-            return;
-          } catch {}
-        }
-        await new Promise(r => setTimeout(r, 100));
-      }
-      if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
-      if (demo) setFirstName('Друг');
-    };
-    void detect();
-    return () => { cancelled = true; };
-  }, []);
 
   /* уроки */
   useEffect(() => {
@@ -358,7 +327,7 @@ export default function Home() {
         <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
-        <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
+        <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{userData?.firstName ? `, ${userData.firstName}` : ''}!</p>
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"

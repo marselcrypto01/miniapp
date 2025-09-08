@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
+import { useTelegramUser } from '@/lib/useTelegramUser';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 type FormatKey = 'group' | 'pro';
@@ -30,6 +31,8 @@ function ns(key: string): string {
 }
 
 export default function CoursesPage() {
+  const { userData } = useTelegramUser();
+  
   // Инициализация
   useEffect(() => { initSupabaseFromTelegram().catch(() => {}); }, []);
 
@@ -40,17 +43,6 @@ export default function CoursesPage() {
 
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
-
-  const tgUser = useMemo(() => {
-  try {
-    const wa = (window as any)?.Telegram?.WebApp;
-    const u = wa?.initDataUnsafe?.user;
-    if (!u) return null;
-    const username = u.username ? `@${u.username}` : '';
-    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || (username || ''); // <= fallback
-    return { name, username };
-  } catch { return null; }
-}, []);
 
   const formats: Record<FormatKey, {
     title: string; emoji: string; teaser: string; chips: string[];
@@ -206,8 +198,8 @@ export default function CoursesPage() {
           title={formats[formOpen].title}
           onClose={() => setFormOpen(null)}
           locked={locked}
-          tgName={tgUser?.name || ''}
-          tgUsername={tgUser?.username || ''}
+          tgName={userData?.firstName || ''}
+          tgUsername={userData?.username || ''}
           onSubmit={async (payload) => {
             const msg = [
               `Формат: ${payload.format === 'group' ? 'Групповой' : 'Индивидуальный'}`,

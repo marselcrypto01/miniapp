@@ -1,29 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { createLead, initSupabaseFromTelegram } from '@/lib/db';
+import { useEffect, useState } from 'react';
+import { useTelegramUser } from '@/lib/useTelegramUser';
+import { initSupabaseFromTelegram, createLead } from '@/lib/db';
 
 export default function ConsultPage() {
+  const { userData } = useTelegramUser();
+  
   // Инициализация (не блокирует форму)
   useEffect(() => {
     initSupabaseFromTelegram().catch(() => {});
   }, []);
 
-  // Автоподстановка из Telegram
-  const tgUser = useMemo(() => {
-  try {
-    const wa = (window as any)?.Telegram?.WebApp;
-    const u = wa?.initDataUnsafe?.user;
-    if (!u) return null;
-    const username = u.username ? `@${u.username}` : '';
-    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || (username || ''); // <= fallback
-    return { name, username };
-  } catch { return null; }
-}, []);
-
-  // Поля формы
-  const [name, setName] = useState(tgUser?.name ?? '');
-  const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
+  // Поля формы с автозаполнением из Telegram
+  const [name, setName] = useState(userData?.firstName || '');
+  const [tgNick, setTgNick] = useState(userData?.username || '');
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');
@@ -34,8 +25,8 @@ export default function ConsultPage() {
 
     const msg =
       [
-        name || tgUser?.name ? `Имя: ${name || tgUser?.name}` : null,
-        tgNick || tgUser?.username ? `TG: ${tgNick || tgUser?.username}` : null,
+        name || userData?.firstName ? `Имя: ${name || userData?.firstName}` : null,
+        tgNick || userData?.username ? `TG: ${tgNick || userData?.username}` : null,
         phone ? `Телефон: ${phone}` : null,
         time ? `Время: ${time}` : null,
         topic ? `Тема: ${topic}` : null,
@@ -47,8 +38,8 @@ export default function ConsultPage() {
       setLoading(true);
       await createLead({
         lead_type: 'consult',
-        name: name || tgUser?.name || undefined,
-        handle: tgNick || tgUser?.username || undefined,
+        name: name || userData?.firstName || undefined,
+        handle: tgNick || userData?.username || undefined,
         phone: phone || undefined,
         comment:
           [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`]

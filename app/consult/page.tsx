@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
-import { waitForTelegramUser } from '@/lib/telegram';
+import { waitForTelegramUser, readTelegramUserNow } from '@/lib/telegram';
 
 export default function ConsultPage() {
   // Инициализация (не блокирует форму)
@@ -11,7 +11,16 @@ export default function ConsultPage() {
   }, []);
 
   // Автоподстановка из Telegram
-  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(null);
+  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(() => {
+    try {
+      const u = readTelegramUserNow();
+      if (!u) return null;
+      return {
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
+        username: u.username ? `@${u.username}` : '',
+      };
+    } catch { return null; }
+  });
   useEffect(() => {
     let stop = false;
     (async () => {
@@ -27,8 +36,8 @@ export default function ConsultPage() {
   }, []);
 
   // Поля формы
-  const [name, setName] = useState('');
-  const [tgNick, setTgNick] = useState('');
+  const [name, setName] = useState(tgUser?.name ?? '');
+  const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');

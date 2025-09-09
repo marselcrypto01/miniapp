@@ -18,12 +18,18 @@ const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
 type AuthCache = { token: string; clientId: string; role: 'user' | 'admin'; exp: number };
 const LS_AUTH_KEY = 'sb_tg_auth_v2';
 
+function isJwtLike(token: string | null | undefined): boolean {
+  return !!token && token.split('.').length === 3;
+}
+
 function loadAuth(): AuthCache | null {
   try {
     const raw = localStorage.getItem(LS_AUTH_KEY);
     if (!raw) return null;
     const a = JSON.parse(raw) as AuthCache;
     if (!a?.token || !a?.clientId || !a?.exp) return null;
+    // игнорируем не-JWT (например, старый гостевой токен)
+    if (!isJwtLike(a.token)) return null;
     if (Date.now() > a.exp * 1000) return null;
     return a;
   } catch { return null; }
@@ -57,7 +63,7 @@ function tryGetInitData(): string | null {
   return null;
 }
 
-async function waitForInitData(timeoutMs = 4000): Promise<string | null> {
+async function waitForInitData(timeoutMs = 8000): Promise<string | null> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const init = tryGetInitData();
@@ -125,15 +131,12 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
   return { clientId: authState.clientId, role: authState.role };
 }
 
-/** Проверка, что токен похож на JWT (три части, два точки). */
-function isJwtLike(token: string | null | undefined): boolean {
-  return !!token && token.split('.').length === 3;
-}
-
 /** Гарантирует реальный JWT от Telegram. Если сейчас гость — пытается обменять initData синхронно. */
 async function ensureRealJwtAuth(): Promise<void> {
   if (authState && isJwtLike(authState.token)) return;
-  const initData = await waitForInitData(6000);
+  // чистим некорректный кэш
+  clearAuthCache();
+  const initData = await waitForInitData(8000);
   if (!initData) throw new Error('telegram_not_initialized');
   const real = await exchangeInitDataToJwt(initData);
   authState = real;

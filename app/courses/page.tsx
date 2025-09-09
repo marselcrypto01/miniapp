@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
-import { waitForTelegramUser } from '@/lib/telegram';
+import { waitForTelegramUser, readTelegramUserNow } from '@/lib/telegram';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 type FormatKey = 'group' | 'pro';
@@ -46,7 +46,16 @@ export default function CoursesPage() {
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
-  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(null);
+  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(() => {
+    try {
+      const u = readTelegramUserNow();
+      if (!u) return null;
+      return {
+        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
+        username: u.username ? `@${u.username}` : '',
+      };
+    } catch { return null; }
+  });
   useEffect(() => {
     let stop = false;
     (async () => {

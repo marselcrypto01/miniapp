@@ -215,11 +215,32 @@ export async function writePresence(input: { page: string; activity?: string; le
 
 /* LEADS — оставляем неблокирующим (если нужно, вернём проверку initData) */
 export async function createLead(input: { lead_type: 'consult' | 'course'; name?: string; handle?: string; phone?: string; comment?: string; message?: string; }): Promise<void> {
-  // Пробрасываем username из Telegram для связки в админке
+  // Пишем напрямую в таблицу через RLS-клиент, чтобы сработали политики и лид сразу появился в админке
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
-  const username = u?.username ?? null;
-  const payload = { ...input, username };
-  const { error } = await sbPublic.functions.invoke('submit-lead', { body: payload });
+  const username = u?.username ?? null; // без '@'
+
+  let sb = await getClient();
+  if (!sb || !authState?.clientId) {
+    await initSupabaseFromTelegram().catch(() => {});
+    sb = await getClient();
+  }
+  if (!sb || !authState?.clientId) throw new Error('auth_not_ready');
+
+  const row = {
+    client_id: authState.clientId,
+    username,
+    lead_type: input.lead_type,
+    message: input.message ?? null,
+    name: input.name ?? null,
+    handle: input.handle ?? null,
+    phone: input.phone ?? null,
+    comment: input.comment ?? null,
+  };
+
+  const { error } = await sb.from('leads').insert(row);
   if (error) throw error;
+
+  // необязательная аналитика
+  try { await sb.from('user_events').insert({ client_id: authState.clientId, username, event: 'lead_submit' }); } catch {}
 }

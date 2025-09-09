@@ -14,20 +14,7 @@ export default function ConsultPage() {
     try {
       const wa = (window as any)?.Telegram?.WebApp;
       const u = wa?.initDataUnsafe?.user;
-      if (!u) {
-        // В режиме разработки возвращаем демо-данные
-        const isDev = process.env.NODE_ENV === 'development' || 
-                     window.location.hostname === 'localhost' || 
-                     window.location.hostname === '127.0.0.1' ||
-                     window.location.hostname.includes('localhost');
-        if (isDev) {
-          return {
-            name: 'Друг',
-            username: '@demo_user',
-          };
-        }
-        return null;
-      }
+      if (!u) return null;
       return {
         name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
         username: u.username ? `@${u.username}` : '',

@@ -173,14 +173,8 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* TG / demo (имя) */
+  /* TG (имя) */
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const isDev = process.env.NODE_ENV === 'development' || 
-                 window.location.hostname === 'localhost' || 
-                 window.location.hostname === '127.0.0.1' ||
-                 window.location.hostname.includes('localhost');
-    const demo = params.get('demo') === '1' || isDev;
     
     let cancelled = false;
     const detect = async () => {
@@ -191,9 +185,9 @@ export default function Home() {
             wa.ready(); wa.expand?.();
             const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
             if (!cancelled) {
-              if (hasInit || demo) {
+              if (hasInit) {
                 setEnv('telegram');
-                const name = wa.initDataUnsafe?.user?.first_name || (demo ? 'Друг' : null);
+                const name = wa.initDataUnsafe?.user?.first_name || null;
                 setFirstName(name);
               } else setEnv('browser');
             }
@@ -202,8 +196,7 @@ export default function Home() {
         }
         await new Promise(r => setTimeout(r, 100));
       }
-      if (!cancelled) setEnv(demo ? 'telegram' : 'browser');
-      if (demo) setFirstName('Друг');
+      if (!cancelled) setEnv('browser');
     };
     void detect();
     return () => { cancelled = true; };
@@ -365,21 +358,7 @@ export default function Home() {
 
         <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
         
-        {/* Временная кнопка для тестирования */}
-        <button 
-          onClick={() => {
-            const wa = (window as any)?.Telegram?.WebApp;
-            console.log('Telegram WebApp:', wa);
-            console.log('initData:', wa?.initData);
-            console.log('user:', wa?.initDataUnsafe?.user);
-            console.log('firstName state:', firstName);
-            console.log('env:', env);
-            alert(`Имя: ${firstName || 'не найдено'}, Env: ${env}`);
-          }}
-          className="mt-2 px-3 py-1 bg-blue-500 text-white rounded text-xs"
-        >
-          Проверить данные
-        </button>
+        
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"

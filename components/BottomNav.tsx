@@ -25,12 +25,43 @@ export default function BottomNav() {
   const [lockedCourses, setLockedCourses] = useState(true);
 
   useEffect(() => {
-    try {
-      const v = localStorage.getItem(ns('all_completed')) === 'true';
-      setLockedCourses(!v);
-    } catch {
-      setLockedCourses(true);
-    }
+    const check = () => {
+      try {
+        const allDone = localStorage.getItem(ns('all_completed')) === 'true';
+        const pts = Number(localStorage.getItem(ns('points')) || '0');
+        if (allDone || pts >= 500) { setLockedCourses(false); return; }
+        // fallback: derive from progress
+        try {
+          const raw = localStorage.getItem(ns('progress'));
+          if (raw) {
+            const arr = JSON.parse(raw) as Array<{ lesson_id: number; status: string }>;
+            const completed = (arr || []).filter(p => p.status === 'completed' && p.lesson_id <= 5).length;
+            if (completed >= 5) { setLockedCourses(false); return; }
+          }
+        } catch {}
+        setLockedCourses(true);
+      } catch {
+        setLockedCourses(true);
+      }
+    };
+
+    check();
+
+    // refresh on focus/visibility
+    window.addEventListener('focus', check);
+    const onVis = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVis);
+
+    // brief polling to catch Telegram SDK readiness and namespace switch
+    const t = setInterval(check, 400);
+    const stopPoll = setTimeout(() => clearInterval(t), 3000);
+
+    return () => {
+      window.removeEventListener('focus', check);
+      document.removeEventListener('visibilitychange', onVis);
+      clearInterval(t);
+      clearTimeout(stopPoll as unknown as number);
+    };
   }, [pathname]);
 
   const Item = ({

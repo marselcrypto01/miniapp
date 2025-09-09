@@ -1,6 +1,10 @@
 // app/page.tsx
 'use client';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
+
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';

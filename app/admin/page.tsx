@@ -6,6 +6,8 @@ import PresenceClient from '@/components/PresenceClient';
 import { createClient } from '@supabase/supabase-js';
 import { initSupabaseFromTelegram } from '@/lib/db';
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const runtime = 'nodejs';
 
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';

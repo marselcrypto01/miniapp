@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 /** Безопасный мок: всегда "ok", бэкенд/Telegram не требуются. */
 export async function POST(_req: Request) {

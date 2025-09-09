@@ -1,6 +1,6 @@
 // app/lesson/[id]/layout.tsx
 // ВАЖНО: без 'use client' — это серверный layout этого сегмента
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export default function LessonSegmentLayout({
   children,

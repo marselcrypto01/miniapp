@@ -125,6 +125,22 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
   return { clientId: authState.clientId, role: authState.role };
 }
 
+/** Проверка, что токен похож на JWT (три части, два точки). */
+function isJwtLike(token: string | null | undefined): boolean {
+  return !!token && token.split('.').length === 3;
+}
+
+/** Гарантирует реальный JWT от Telegram. Если сейчас гость — пытается обменять initData синхронно. */
+async function ensureRealJwtAuth(): Promise<void> {
+  if (authState && isJwtLike(authState.token)) return;
+  const initData = await waitForInitData(6000);
+  if (!initData) throw new Error('telegram_not_initialized');
+  const real = await exchangeInitDataToJwt(initData);
+  authState = real;
+  saveAuth(real);
+  makeRlsClient(real.token);
+}
+
 /* ───────── Геттер клиента (не блокирует) ───────── */
 async function getClient(): Promise<SupabaseClient | null> {
   if (rlsClient) return rlsClient;
@@ -215,17 +231,17 @@ export async function writePresence(input: { page: string; activity?: string; le
 
 /* LEADS — оставляем неблокирующим (если нужно, вернём проверку initData) */
 export async function createLead(input: { lead_type: 'consult' | 'course'; name?: string; handle?: string; phone?: string; comment?: string; message?: string; }): Promise<void> {
-  // Пишем напрямую в таблицу через RLS-клиент, чтобы сработали политики и лид сразу появился в админке
+  // Пишем напрямую в таблицу через реальный RLS-JWT (не гость), чтобы сработали политики
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
   const username = u?.username ?? null; // без '@'
 
+  // Гарантируем реальный JWT. Если гость — пробуем обменять initData немедленно
+  await ensureRealJwtAuth();
   let sb = await getClient();
-  if (!sb || !authState?.clientId) {
-    await initSupabaseFromTelegram().catch(() => {});
-    sb = await getClient();
+  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) {
+    throw new Error('auth_not_ready');
   }
-  if (!sb || !authState?.clientId) throw new Error('auth_not_ready');
 
   const row = {
     client_id: authState.clientId,

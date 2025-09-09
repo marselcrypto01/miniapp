@@ -392,7 +392,7 @@ function UsersTab() {
                 const isOnline = Date.now() - new Date(s.updated_at).getTime() < onlineThresholdMs;
                 return (
                   <tr key={(s.client_id || 'unknown') + '-' + s.updated_at} className="border-t border-[var(--border)]">
-                    <td className="px-2 py-2">{s.username ? `@${s.username}` : (s.client_id || '—')}</td>
+                    <td className="px-2 py-2">{s.username ? `@${s.username.replace(/^@+/, '')}` : (s.client_id || '—')}</td>
                     <td className="px-2 py-2">{s.page || '—'}</td>
                     <td className="px-2 py-2">{s.activity || '—'}</td>
                     <td className="px-2 py-2">{s.lesson_id ?? '—'}</td>

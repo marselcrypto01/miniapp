@@ -215,7 +215,11 @@ export async function writePresence(input: { page: string; activity?: string; le
 
 /* LEADS — оставляем неблокирующим (если нужно, вернём проверку initData) */
 export async function createLead(input: { lead_type: 'consult' | 'course'; name?: string; handle?: string; phone?: string; comment?: string; message?: string; }): Promise<void> {
-  try {
-    await sbPublic.functions.invoke('submit-lead', { body: { ...input } });
-  } catch (e) { console.warn('createLead failed', e); }
+  // Пробрасываем username из Telegram для связки в админке
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+  const username = u?.username ?? null;
+  const payload = { ...input, username };
+  const { error } = await sbPublic.functions.invoke('submit-lead', { body: payload });
+  if (error) throw error;
 }

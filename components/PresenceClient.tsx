@@ -42,7 +42,7 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
       if (cancelled) return;
       try {
         const u = readTelegramUserNow();
-        const handle = u?.username ? `@${u.username}` : null;
+        const handle = u?.username ? String(u.username) : null; // без '@'
         await writePresence({
           page,
           activity,

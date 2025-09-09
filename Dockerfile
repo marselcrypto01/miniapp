@@ -1,12 +1,16 @@
 # syntax=docker/dockerfile:1
 
-# --- deps: ставим prod+dev (нужен typescript для next.config.ts)
+############################
+# deps: prod + dev (нужен typescript для next.config.ts)
+############################
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --include=dev
 
-# --- build: собираем Next в standalone-режиме ---
+############################
+# build: сборка Next в standalone
+############################
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -24,13 +28,16 @@ ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 # билд
 RUN npm run build
 
-# --- runtime: минимальный рантайм только со сборкой ---
+############################
+# runtime: минимальный образ со сборкой
+############################
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
-    PORT=3000 \
+    PORT=80 \
     HOSTNAME=0.0.0.0 \
+    HOST=0.0.0.0 \
     NEXT_TELEMETRY_DISABLED=1
 
 # public и standalone-вывод next
@@ -38,5 +45,5 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-EXPOSE 3000
+EXPOSE 80
 CMD ["node", "server.js"]

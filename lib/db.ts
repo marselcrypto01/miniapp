@@ -57,6 +57,16 @@ function tryGetInitData(): string | null {
   return null;
 }
 
+async function waitForInitData(timeoutMs = 4000): Promise<string | null> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const init = tryGetInitData();
+    if (init && init.length > 0) return init;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return tryGetInitData();
+}
+
 export function getTgDisplayName(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -92,7 +102,8 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
   }
 
   // 1) Если есть initData — делаем настоящий tg-auth (персонализация и привязка к пользователю)
-  const initData = tryGetInitData();
+  //    Дождёмся появления initData до 4 секунд, чтобы не уйти в гостя раньше времени
+  const initData = await waitForInitData(4000);
   if (initData) {
     try {
       const real = await exchangeInitDataToJwt(initData);

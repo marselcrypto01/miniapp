@@ -173,12 +173,12 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* TG (имя) */
+  /* TG (имя) — ждём появления WebApp.initData, чтобы не потерять пользователя */
   useEffect(() => {
     
     let cancelled = false;
     const detect = async () => {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 50; i++) { // ~5 секунд ожидания
         const wa = (window as any)?.Telegram?.WebApp;
         if (wa) {
           try {

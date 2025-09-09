@@ -10,23 +10,33 @@ export default function ConsultPage() {
   }, []);
 
   // Автоподстановка из Telegram
-  const tgUser = useMemo(() => {
-    try {
-      const wa = (window as any)?.Telegram?.WebApp;
-      const u = wa?.initDataUnsafe?.user;
-      if (!u) return null;
-      return {
-        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
-        username: u.username ? `@${u.username}` : '',
-      };
-    } catch {
-      return null;
-    }
+  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    (async () => {
+      for (let i = 0; i < 50 && !stop; i++) {
+        try {
+          const wa = (window as any)?.Telegram?.WebApp;
+          const u = wa?.initDataUnsafe?.user;
+          if (u && (wa?.initData?.length ?? 0) > 0) {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
+            const username = u.username ? `@${u.username}` : '';
+            setTgUser({ name, username });
+            // если поля пусты — установим
+            setName((prev) => prev || name);
+            setTgNick((prev) => prev || username);
+            return;
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 100));
+      }
+    })();
+    return () => { stop = true; };
   }, []);
 
   // Поля формы
-  const [name, setName] = useState(tgUser?.name ?? '');
-  const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
+  const [name, setName] = useState('');
+  const [tgNick, setTgNick] = useState('');
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');

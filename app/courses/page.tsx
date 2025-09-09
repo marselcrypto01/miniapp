@@ -41,16 +41,25 @@ export default function CoursesPage() {
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});
   const [formOpen, setFormOpen] = useState<null | FormatKey>(null);
 
-  const tgUser = useMemo(() => {
-    try {
-      const wa = (window as any)?.Telegram?.WebApp;
-      const u = wa?.initDataUnsafe?.user;
-      if (!u) return null;
-      return {
-        name: [u.first_name, u.last_name].filter(Boolean).join(' ') || '',
-        username: u.username ? `@${u.username}` : '',
-      };
-    } catch { return null; }
+  const [tgUser, setTgUser] = useState<{ name: string; username: string } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    (async () => {
+      for (let i = 0; i < 50 && !stop; i++) {
+        try {
+          const wa = (window as any)?.Telegram?.WebApp;
+          const u = wa?.initDataUnsafe?.user;
+          if (u && (wa?.initData?.length ?? 0) > 0) {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
+            const username = u.username ? `@${u.username}` : '';
+            setTgUser({ name, username });
+            return;
+          }
+        } catch {}
+        await new Promise(r => setTimeout(r, 100));
+      }
+    })();
+    return () => { stop = true; };
   }, []);
 
   const formats: Record<FormatKey, {

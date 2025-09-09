@@ -36,7 +36,11 @@ export default function CoursesPage() {
 
   const [locked, setLocked] = useState(true);
   useEffect(() => {
-    try { setLocked(!(localStorage.getItem(ns('all_completed')) === 'true')); } catch {}
+    try {
+      const done = localStorage.getItem(ns('all_completed')) === 'true';
+      const pts = Number(localStorage.getItem(ns('points')) || '0');
+      setLocked(!(done || pts >= 500));
+    } catch {}
   }, []);
 
   const [open, setOpen] = useState<{ [K in FormatKey]?: boolean }>({});

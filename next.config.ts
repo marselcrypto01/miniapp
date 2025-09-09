@@ -2,6 +2,7 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   eslint: {
     // не падать из-за ESLint на прод-сборке (Cloudflare Pages)
     ignoreDuringBuilds: true,

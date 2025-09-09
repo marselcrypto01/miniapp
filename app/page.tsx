@@ -11,7 +11,7 @@ import {
   saveUserProgress,
   initSupabaseFromTelegram,
 } from '@/lib/db';
-import { waitForTelegramUser, getDisplayName } from '@/lib/telegram';
+import { waitForTelegramUser, getDisplayName, readTelegramUserNow } from '@/lib/telegram';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
@@ -174,17 +174,17 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* TG (имя) — ждём появления Telegram пользователя (WebApp или hash) */
+  /* TG (имя) — сначала пробуем мгновенно, затем ждём до 5 сек */
   useEffect(() => {
     
     let cancelled = false;
     const detect = async () => {
-      const u = await waitForTelegramUser(5000);
+      let u = readTelegramUserNow();
+      if (!u) u = await waitForTelegramUser(5000);
       if (cancelled) return;
       const wa = (window as any)?.Telegram?.WebApp;
       try { wa?.ready?.(); wa?.expand?.(); } catch {}
-      const hasInit = typeof wa?.initData === 'string' && wa?.initData.length > 0;
-      if (u && hasInit) {
+      if (u) {
         setEnv('telegram');
         setFirstName(getDisplayName(u));
       } else {
@@ -288,7 +288,7 @@ export default function Home() {
     return () => { window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
-  /* сохраняем и считаем ачивки */
+  /* сохраняем и считаем ачивки + очки (в user-scoped LS) */
   useEffect(() => {
     if (!progressLoaded) return;
     const next = { ...achievements };
@@ -309,6 +309,10 @@ export default function Home() {
 
     try { localStorage.setItem(ns('progress'), JSON.stringify(progress)); } catch {}
     (async () => { try { await saveUserProgress(progress); } catch {} })();
+
+    // сохраняем очки (кап 500)
+    const pts = Math.min(500, finishedCount * POINTS_PER_LESSON);
+    try { localStorage.setItem(ns('points'), String(pts)); } catch {}
   }, [progress, progressLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* компактная «рамка» уровня */
@@ -364,7 +368,7 @@ export default function Home() {
         <div className="mt-3 grid grid-cols-2 gap-2 w-full">
           <div className="w-full">
             <div className="chip px-3 py-1.5 w-full justify-center text-xs">
-              <span>🏆</span><span className="font-semibold">{points} очк.</span>
+              <span>🏆</span><span className="font-semibold">{Math.min(500, points)} очк.</span>
             </div>
           </div>
           <ChipRing pct={progressPct}>
@@ -458,11 +462,11 @@ export default function Home() {
               <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
               <button
                 className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                onClick={() => allCompleted && router.push('/lesson/6')}
-                disabled={!allCompleted}
-                title={allCompleted ? 'Открыть бонус' : 'Откроется после прохождения всех уроков'}
+                onClick={() => (allCompleted || points >= 500) && router.push('/lesson/6')}
+                disabled={!(allCompleted || points >= 500)}
+                title={(allCompleted || points >= 500) ? 'Открыть бонус' : 'Откроется после прохождения всех уроков или 500 очков'}
               >
-                {allCompleted ? 'Открыть' : 'Откроется после курса'}
+                {(allCompleted || points >= 500) ? 'Открыть' : 'Откроется после курса/500 очков'}
               </button>
             </div>
           </div>

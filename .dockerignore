@@ -1,0 +1,8 @@
+node_modules
+.next
+.git
+.gitignore
+netlify
+netlify.toml
+supabase.exe
+README.md

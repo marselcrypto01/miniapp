@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { initSupabaseFromTelegram, writePresence } from '@/lib/db';
+import { readTelegramUserNow } from '@/lib/telegram';
 
 export type PresenceProps = {
   page: string;
@@ -40,12 +41,14 @@ export default function PresenceClient({ page, activity, lessonId, progressPct }
     const beat = async () => {
       if (cancelled) return;
       try {
+        const u = readTelegramUserNow();
+        const handle = u?.username ? `@${u.username}` : null;
         await writePresence({
           page,
           activity,
           lessonId: lessonId ?? null,
           progressPct: typeof progressPct === 'number' ? progressPct : undefined,
-          username: null,
+          username: handle,
         });
       } catch {}
     };

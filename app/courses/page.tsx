@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
+import { waitForTelegramUser } from '@/lib/telegram';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 type FormatKey = 'group' | 'pro';
@@ -45,19 +46,11 @@ export default function CoursesPage() {
   useEffect(() => {
     let stop = false;
     (async () => {
-      for (let i = 0; i < 50 && !stop; i++) {
-        try {
-          const wa = (window as any)?.Telegram?.WebApp;
-          const u = wa?.initDataUnsafe?.user;
-          if (u && (wa?.initData?.length ?? 0) > 0) {
-            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
-            const username = u.username ? `@${u.username}` : '';
-            setTgUser({ name, username });
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
-      }
+      const u = await waitForTelegramUser(5000);
+      if (stop || !u) return;
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
+      const username = u.username ? `@${u.username}` : '';
+      setTgUser({ name, username });
     })();
     return () => { stop = true; };
   }, []);

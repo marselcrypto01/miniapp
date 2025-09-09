@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { createLead, initSupabaseFromTelegram } from '@/lib/db';
+import { waitForTelegramUser } from '@/lib/telegram';
 
 export default function ConsultPage() {
   // Инициализация (не блокирует форму)
@@ -14,22 +15,13 @@ export default function ConsultPage() {
   useEffect(() => {
     let stop = false;
     (async () => {
-      for (let i = 0; i < 50 && !stop; i++) {
-        try {
-          const wa = (window as any)?.Telegram?.WebApp;
-          const u = wa?.initDataUnsafe?.user;
-          if (u && (wa?.initData?.length ?? 0) > 0) {
-            const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
-            const username = u.username ? `@${u.username}` : '';
-            setTgUser({ name, username });
-            // если поля пусты — установим
-            setName((prev) => prev || name);
-            setTgNick((prev) => prev || username);
-            return;
-          }
-        } catch {}
-        await new Promise(r => setTimeout(r, 100));
-      }
+      const u = await waitForTelegramUser(5000);
+      if (stop || !u) return;
+      const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
+      const username = u.username ? `@${u.username}` : '';
+      setTgUser({ name, username });
+      setName((prev) => prev || name);
+      setTgNick((prev) => prev || username);
     })();
     return () => { stop = true; };
   }, []);

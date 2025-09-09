@@ -11,6 +11,7 @@ import {
   saveUserProgress,
   initSupabaseFromTelegram,
 } from '@/lib/db';
+import { waitForTelegramUser, getDisplayName } from '@/lib/telegram';
 
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 type Lesson   = { id: number; title: string; subtitle?: string | null };
@@ -173,30 +174,22 @@ export default function Home() {
   );
   const coreLessons  = useMemo(() => lessons.filter(l => l.id <= CORE_LESSONS_COUNT), [lessons]);
 
-  /* TG (имя) — ждём появления WebApp.initData, чтобы не потерять пользователя */
+  /* TG (имя) — ждём появления Telegram пользователя (WebApp или hash) */
   useEffect(() => {
     
     let cancelled = false;
     const detect = async () => {
-      for (let i = 0; i < 50; i++) { // ~5 секунд ожидания
-        const wa = (window as any)?.Telegram?.WebApp;
-        if (wa) {
-          try {
-            wa.ready(); wa.expand?.();
-            const hasInit = typeof wa.initData === 'string' && wa.initData.length > 0;
-            if (!cancelled) {
-              if (hasInit) {
-                setEnv('telegram');
-                const name = wa.initDataUnsafe?.user?.first_name || null;
-                setFirstName(name);
-              } else setEnv('browser');
-            }
-            return;
-          } catch {}
-        }
-        await new Promise(r => setTimeout(r, 100));
+      const u = await waitForTelegramUser(5000);
+      if (cancelled) return;
+      const wa = (window as any)?.Telegram?.WebApp;
+      try { wa?.ready?.(); wa?.expand?.(); } catch {}
+      const hasInit = typeof wa?.initData === 'string' && wa?.initData.length > 0;
+      if (u && hasInit) {
+        setEnv('telegram');
+        setFirstName(getDisplayName(u));
+      } else {
+        setEnv('browser');
       }
-      if (!cancelled) setEnv('browser');
     };
     void detect();
     return () => { cancelled = true; };

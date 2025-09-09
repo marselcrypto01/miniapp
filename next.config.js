@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Полностью пропускаем ESLint на сборке
+  // Полностью пропускаем ESLint на сборке\
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },

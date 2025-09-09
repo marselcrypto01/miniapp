@@ -206,7 +206,6 @@ function LeadsTab() {
             <tr className="[&>th]:text-left [&>th]:p-2">
               <th>Дата</th>
               <th>Тип</th>
-              <th>Юзернейм</th>
               <th>Ник</th>
               <th>Телефон</th>
               <th>Имя</th>
@@ -218,7 +217,7 @@ function LeadsTab() {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td className="p-3 text-center text-[var(--muted)]" colSpan={9}>
+                <td className="p-3 text-center text-[var(--muted)]" colSpan={8}>
                   Нет записей
                 </td>
               </tr>
@@ -227,7 +226,6 @@ function LeadsTab() {
               <tr key={r.id} className="border-t border-[var(--border)] align-top">
                 <td className="p-2 whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</td>
                 <td className="p-2">{r.lead_type === 'consult' ? 'Консультация' : 'Обучение'}</td>
-                <td className="p-2">{r.username ? `@${r.username}` : '—'}</td>
                 <td className="p-2">{r.handle || '—'}</td>
                 <td className="p-2">{r.phone || '—'}</td>
                 <td className="p-2">{r.name || '—'}</td>

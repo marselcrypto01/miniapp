@@ -64,6 +64,13 @@ export default function CoursesPage() {
       const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '';
       const username = u.username ? `@${u.username}` : '';
       setTgUser({ name, username });
+      try {
+        const wa: any = (window as any)?.Telegram?.WebApp;
+        const id = wa?.initDataUnsafe?.user?.id;
+        const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+        if (name) localStorage.setItem(ns('display_name'), name);
+        if (u.username) localStorage.setItem(ns('username'), String(u.username));
+      } catch {}
     })();
     return () => { stop = true; };
   }, []);
@@ -222,8 +229,8 @@ export default function CoursesPage() {
           title={formats[formOpen].title}
           onClose={() => setFormOpen(null)}
           locked={locked}
-          tgName={tgUser?.name || ''}
-          tgUsername={tgUser?.username || ''}
+          tgName={(tgUser?.name) || (()=>{ try { const wa: any = (window as any)?.Telegram?.WebApp; const id = wa?.initDataUnsafe?.user?.id; const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`); return localStorage.getItem(ns('display_name')) || ''; } catch { return ''; } })()}
+          tgUsername={(tgUser?.username) || (()=>{ try { const wa: any = (window as any)?.Telegram?.WebApp; const id = wa?.initDataUnsafe?.user?.id; const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`); const saved = localStorage.getItem(ns('username')); return saved ? `@${saved.replace(/^@+/, '')}` : ''; } catch { return ''; } })()}
           onSubmit={async (payload) => {
             const msg = [
               `Формат: ${payload.format === 'group' ? 'Групповой' : 'Индивидуальный'}`,
@@ -235,10 +242,18 @@ export default function CoursesPage() {
             ].filter(Boolean).join('\n');
 
             try {
+              try {
+                const wa: any = (window as any)?.Telegram?.WebApp;
+                const id = wa?.initDataUnsafe?.user?.id;
+                const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+                if (payload.name) localStorage.setItem(ns('display_name'), payload.name);
+                const clean = (payload.handle || '').replace(/^@+/, '');
+                if (clean) localStorage.setItem(ns('username'), clean);
+              } catch {}
               await createLead({
                 lead_type: 'course',
                 name: payload.name || undefined,
-                handle: payload.handle || undefined,
+                handle: (payload.handle || '').replace(/^@+/, '@') || undefined,
                 phone: payload.phone || undefined,
                 comment: [`Старт: ${payload.start}`, payload.comment].filter(Boolean).join(' | '),
                 message: msg,

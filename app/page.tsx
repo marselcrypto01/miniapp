@@ -94,7 +94,7 @@ function ns(key: string): string {
 export default function Home() {
   const router = useRouter();
 
-  const [firstName, setFirstName] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string>('');
   const [env, setEnv] = useState<Env>('loading');
 
   const [lessons, setLessons] = useState<Lesson[]>([]);
@@ -176,7 +176,12 @@ export default function Home() {
 
   /* TG (имя) — сначала пробуем мгновенно, затем ждём до 5 сек */
   useEffect(() => {
-    
+    // сначала поднимем сохранённое имя из user-scoped localStorage
+    try {
+      const savedName = localStorage.getItem(ns('display_name'));
+      if (savedName) setFirstName(savedName);
+    } catch {}
+
     let cancelled = false;
     const detect = async () => {
       let u = readTelegramUserNow();
@@ -186,7 +191,12 @@ export default function Home() {
       try { wa?.ready?.(); wa?.expand?.(); } catch {}
       if (u) {
         setEnv('telegram');
-        setFirstName(getDisplayName(u));
+        const dn = getDisplayName(u) || '';
+        setFirstName(dn);
+        try {
+          localStorage.setItem(ns('display_name'), dn);
+          if (u.username) localStorage.setItem(ns('username'), String(u.username));
+        } catch {}
       } else {
         setEnv('browser');
       }
@@ -281,7 +291,16 @@ export default function Home() {
 
   /* авто-обновление при возврате */
   useEffect(() => {
-    const refresh = () => { try { const raw = localStorage.getItem(ns('progress')); if (raw) setProgress(JSON.parse(raw)); } catch {} };
+    const refresh = () => {
+      try {
+        const raw = localStorage.getItem(ns('progress'));
+        if (raw) setProgress(JSON.parse(raw));
+      } catch {}
+      try {
+        const nm = localStorage.getItem(ns('display_name'));
+        if (nm) setFirstName(nm || '');
+      } catch {}
+    };
     window.addEventListener('focus', refresh);
     const onVis = () => document.visibilityState === 'visible' && refresh();
     document.addEventListener('visibilitychange', onVis);
@@ -387,7 +406,7 @@ export default function Home() {
           </div>
           {/* вернул прежний мелкий шрифт (11px) */}
           <div className="mt-1 flex items-center justify-between text-[11px] text-[var(--muted)]">
-            <span>Пройдено: {completedCount}/{CORE_LESSONS_COUNT}</span>
+            <span>Пройдено: {Math.min(completedCount, CORE_LESSONS_COUNT)}/{CORE_LESSONS_COUNT}</span>
             <span>Осталось: {Math.max(0, CORE_LESSONS_COUNT - completedCount)}</span>
           </div>
         </div>

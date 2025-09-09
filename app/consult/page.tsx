@@ -31,13 +31,36 @@ export default function ConsultPage() {
       setTgUser({ name, username });
       setName((prev) => prev || name);
       setTgNick((prev) => prev || username);
+      try {
+        const wa: any = (window as any)?.Telegram?.WebApp;
+        const id = wa?.initDataUnsafe?.user?.id;
+        const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+        if (name) localStorage.setItem(ns('display_name'), name);
+        if (u.username) localStorage.setItem(ns('username'), String(u.username));
+      } catch {}
     })();
     return () => { stop = true; };
   }, []);
 
   // Поля формы
-  const [name, setName] = useState(tgUser?.name ?? '');
-  const [tgNick, setTgNick] = useState(tgUser?.username ?? '');
+  const [name, setName] = useState(() => {
+    try {
+      const wa: any = (window as any)?.Telegram?.WebApp;
+      const id = wa?.initDataUnsafe?.user?.id;
+      const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+      return tgUser?.name ?? localStorage.getItem(ns('display_name')) ?? '';
+    } catch { return tgUser?.name ?? ''; }
+  });
+  const [tgNick, setTgNick] = useState(() => {
+    try {
+      const wa: any = (window as any)?.Telegram?.WebApp;
+      const id = wa?.initDataUnsafe?.user?.id;
+      const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+      const savedUser = localStorage.getItem(ns('username'));
+      const withAt = savedUser ? `@${savedUser.replace(/^@+/, '')}` : '';
+      return tgUser?.username ?? withAt;
+    } catch { return tgUser?.username ?? ''; }
+  });
   const [phone, setPhone] = useState('');
   const [time, setTime] = useState('');
   const [topic, setTopic] = useState('');
@@ -59,10 +82,18 @@ export default function ConsultPage() {
 
     try {
       setLoading(true);
+      try {
+        const wa: any = (window as any)?.Telegram?.WebApp;
+        const id = wa?.initDataUnsafe?.user?.id;
+        const ns = (k: string) => (id ? `${k}:tg_${id}` : `${k}:anon`);
+        if (name) localStorage.setItem(ns('display_name'), name);
+        const clean = (tgNick || tgUser?.username || '').replace(/^@+/, '');
+        if (clean) localStorage.setItem(ns('username'), clean);
+      } catch {}
       await createLead({
         lead_type: 'consult',
         name: name || tgUser?.name || undefined,
-        handle: tgNick || tgUser?.username || undefined,
+        handle: (tgNick || tgUser?.username || '').replace(/^@+/, '@'),
         phone: phone || undefined,
         comment:
           [time && `Желаемое время: ${time}`, topic && `Тема: ${topic}`]

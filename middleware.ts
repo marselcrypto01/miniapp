@@ -20,7 +20,9 @@ export function middleware(req: NextRequest) {
   return NextResponse.next()
 }
 
-// Применяем middleware ко всему приложению
 export const config = {
-  matcher: ['/', '/(.*)'],
+  matcher: [
+    '/((?!api/health|_next/static|favicon.ico|robots.txt|sitemap.xml).*)',
+  ],
 }
+

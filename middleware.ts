@@ -25,4 +25,3 @@ export const config = {
     '/((?!api/health|_next/static|favicon.ico|robots.txt|sitemap.xml).*)',
   ],
 }
-

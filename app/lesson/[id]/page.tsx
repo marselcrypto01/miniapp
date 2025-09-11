@@ -4,6 +4,7 @@
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
+import TestComponent from '@/components/TestComponent';
 import { initSupabaseFromTelegram, saveUserProgress } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
@@ -175,9 +176,13 @@ export default function LessonPage() {
         </section>
       )}
       {tab === 'test' && (
-        <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">
-          Мини-квиз по уроку (заглушка).
-        </section>
+        <TestComponent 
+          lessonId={id} 
+          onTestComplete={(result) => {
+            console.log('Test completed:', result);
+            // Можно добавить дополнительную логику при завершении теста
+          }}
+        />
       )}
       {tab === 'goodies' && (
         <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">

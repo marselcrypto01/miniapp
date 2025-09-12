@@ -243,7 +243,7 @@ function LeadsTab() {
 
 /* ───────── Таб «Результаты тестов» ───────── */
 function TestsTab() {
-  const [rows, setRows] = useState<Array<{ username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }>>([]);
+  const [rows, setRows] = useState<Array<{ client_id: string | null; username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }>>([]);
   const [loading, setLoading] = useState(false);
 
   async function load() {
@@ -252,17 +252,55 @@ function TestsTab() {
       const sb = getRlsClient();
       const { data, error } = await sb
         .from('user_events')
-        .select('username, lesson_id, meta, occurred_at')
+        .select('client_id, username, lesson_id, meta, occurred_at')
         .eq('event', 'test_pass')
         .order('occurred_at', { ascending: false })
         .limit(500);
       if (error) throw error;
-      const mapped = (data ?? []).map((r: any) => ({
+      let mapped: Array<{ client_id: string | null; username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }> = (data ?? []).map((r: any) => ({
+        client_id: r.client_id || null,
         username: r.username || null,
         lesson_id: r.lesson_id ?? null,
         percentage: (r.meta?.percentage ?? null) as number | null,
         occurred_at: r.occurred_at as string,
       }));
+
+      // Fallback для username: берём последний из leads или lesson_progress
+      const missingIds = Array.from(new Set(mapped.filter(r => !r.username && r.client_id).map(r => r.client_id as string)));
+      if (missingIds.length) {
+        const [leadsRes, progRes] = await Promise.all([
+          sb.from('leads')
+            .select('client_id, username, created_at')
+            .in('client_id', missingIds)
+            .order('created_at', { ascending: false })
+            .limit(2000),
+          sb.from('lesson_progress')
+            .select('client_id, username, updated_at')
+            .in('client_id', missingIds)
+            .order('updated_at', { ascending: false })
+            .limit(2000),
+        ]);
+
+        const leadMap = new Map<string, string>();
+        (leadsRes.data as any[] | null)?.forEach((r) => {
+          const id = String(r.client_id);
+          if (!leadMap.has(id) && r.username) leadMap.set(id, String(r.username));
+        });
+
+        const progMap = new Map<string, string>();
+        (progRes.data as any[] | null)?.forEach((r) => {
+          const id = String(r.client_id);
+          if (!progMap.has(id) && r.username) progMap.set(id, String(r.username));
+        });
+
+        mapped = mapped.map((r) => {
+          if (r.username) return r;
+          const id = r.client_id ? String(r.client_id) : '';
+          const u = leadMap.get(id) || progMap.get(id) || null;
+          return { ...r, username: u };
+        });
+      }
+
       setRows(mapped);
     } finally { setLoading(false); }
   }
@@ -277,7 +315,7 @@ function TestsTab() {
       </div>
 
       <div className="overflow-auto rounded-2xl border border-[var(--border)]">
-        <table className="min-w-[680px] w-full text-sm">
+        <table className="min-w-[720px] w-full text-sm">
           <thead className="bg-[var(--surface-2)]">
             <tr className="[&>th]:text-left [&>th]:p-2">
               <th>Юзернейм</th>
@@ -292,7 +330,7 @@ function TestsTab() {
             )}
             {rows.map((r, i) => (
               <tr key={i} className="border-t border-[var(--border)]">
-                <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : '—'}</td>
+                <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : (r.client_id || '—')}</td>
                 <td className="p-2">{r.lesson_id ?? '—'}</td>
                 <td className="p-2">{typeof r.percentage === 'number' ? `${r.percentage}%` : '—'}</td>
                 <td className="p-2">{new Date(r.occurred_at).toLocaleString()}</td>

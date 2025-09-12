@@ -666,12 +666,21 @@ function MaterialsTab() {
         </div>
         <div className="flex-1 min-w-[220px]">
           <label className="text-xs text-[var(--muted)]">{form.kind === 'text' ? 'Текст' : 'URL'}</label>
-          <input
-            className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
-            value={form.url}
-            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-            placeholder={form.kind === 'text' ? 'Вставьте текст заметки' : 'https://… или public URL картинки'}
-          />
+          {form.kind === 'text' ? (
+            <textarea
+              className="min-h-[120px] w-full rounded-xl px-3 py-2 bg-[var(--surface-2)] border border-[var(--border)] outline-none resize-y"
+              value={form.url}
+              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="Введите текст с абзацами (Enter — новая строка)"
+            />
+          ) : (
+            <input
+              className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              value={form.url}
+              onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+              placeholder="https://… или public URL картинки"
+            />
+          )}
         </div>
         {form.kind === 'image' && (
           <div className="flex-1 min-w-[220px]">

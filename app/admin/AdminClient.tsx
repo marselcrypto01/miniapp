@@ -245,6 +245,10 @@ function LeadsTab() {
 function TestsTab() {
   const [rows, setRows] = useState<Array<{ client_id: string | null; username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }>>([]);
   const [loading, setLoading] = useState(false);
+  const [lessonFilter, setLessonFilter] = useState<string>('all');
+  const [minPct, setMinPct] = useState<string>('');
+  const [maxPct, setMaxPct] = useState<string>('');
+  const [since, setSince] = useState<string>('');
 
   async function load() {
     setLoading(true);
@@ -309,9 +313,24 @@ function TestsTab() {
 
   return (
     <section className="space-y-3 w-full">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-lg font-bold">Результаты тестов</div>
-        <Btn variant="brand" onClick={load} disabled={loading}>{loading ? 'Обновляю…' : 'Обновить'}</Btn>
+        <div className="flex items-center gap-2">
+          <select className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={lessonFilter} onChange={(e)=>setLessonFilter(e.target.value)}>
+            <option value="all">Все уроки</option>
+            <option value="1">Урок 1</option>
+            <option value="2">Урок 2</option>
+            <option value="3">Урок 3</option>
+            <option value="4">Урок 4</option>
+            <option value="5">Урок 5</option>
+            <option value="6">Урок 6</option>
+          </select>
+          <input placeholder="Минимум %" className="h-9 w-28 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={minPct} onChange={(e)=>setMinPct(e.target.value.replace(/[^0-9]/g,''))} />
+          <input placeholder="Максимум %" className="h-9 w-28 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={maxPct} onChange={(e)=>setMaxPct(e.target.value.replace(/[^0-9]/g,''))} />
+          <input type="date" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={since} onChange={(e)=>setSince(e.target.value)} />
+          <Btn variant="outline" onClick={load} disabled={loading}>↻</Btn>
+          <Btn variant="brand" onClick={()=>exportCsv()} disabled={rows.length===0}>⬇️ CSV</Btn>
+        </div>
       </div>
 
       <div className="overflow-auto rounded-2xl border border-[var(--border)]">
@@ -328,7 +347,16 @@ function TestsTab() {
             {rows.length === 0 && (
               <tr><td className="p-3 text-center text-[var(--muted)]" colSpan={4}>Пока пусто</td></tr>
             )}
-            {rows.map((r, i) => (
+            {rows
+              .filter(r => lessonFilter==='all' || String(r.lesson_id||'')===lessonFilter)
+              .filter(r => minPct==='' || (typeof r.percentage==='number' && r.percentage>=Number(minPct)))
+              .filter(r => maxPct==='' || (typeof r.percentage==='number' && r.percentage<=Number(maxPct)))
+              .filter(r => {
+                if (!since) return true;
+                const d = new Date(r.occurred_at).toISOString().slice(0,10);
+                return d >= since;
+              })
+              .map((r, i) => (
               <tr key={i} className="border-t border-[var(--border)]">
                 <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : (r.client_id || '—')}</td>
                 <td className="p-2">{r.lesson_id ?? '—'}</td>
@@ -341,6 +369,40 @@ function TestsTab() {
       </div>
     </section>
   );
+}
+
+function exportCsvFilename() {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `tests_${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.csv`;
+}
+
+function exportCsv() {
+  // Соберём таблицу из текущих строк на странице
+  const table = document.querySelector('table');
+  if (!table) return;
+  const rows: string[] = [];
+  const esc = (s: string) => '"' + s.replace(/"/g, '""') + '"';
+  rows.push(['username','lesson_id','percentage','occurred_at'].join(','));
+  table.querySelectorAll('tbody tr').forEach((tr) => {
+    const tds = tr.querySelectorAll('td');
+    if (tds.length < 4) return;
+    rows.push([
+      esc((tds[0].textContent || '').trim()),
+      (tds[1].textContent || '').trim(),
+      (tds[2].textContent || '').trim().replace('%',''),
+      (tds[3].textContent || '').trim(),
+    ].join(','));
+  });
+  const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = exportCsvFilename();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 /* ───────── Users: presence_live с «липкими» полями ───────── */

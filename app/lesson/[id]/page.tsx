@@ -48,6 +48,7 @@ export default function LessonPage() {
   const [authReady, setAuthReady] = React.useState(false);
   const [materials, setMaterials] = React.useState<DbLessonMaterial[] | null>(null);
   const [loadingMaterials, setLoadingMaterials] = React.useState(false);
+  const [animateTab, setAnimateTab] = React.useState<Tab>('desc');
 
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
@@ -191,7 +192,7 @@ export default function LessonPage() {
             return (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
+                onClick={() => { setTab(t.key); setAnimateTab(t.key); }}
                 className={`min-h-11 h-auto py-2 w-full flex items-center justify-center gap-1.5
                   text-sm ${active ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface)] text-[var(--fg)]'}
                   ${i !== 0 ? 'border-l border-[var(--border)]' : ''}`}
@@ -207,7 +208,7 @@ export default function LessonPage() {
 
       {/* Контент табов (пример) */}
       {tab === 'desc' && (
-        <section className="glass p-4 rounded-2xl w-full">
+        <section className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${animateTab==='desc' ? 'animate-[fadeIn_.3s_ease]' : ''}`}>
           <ul className="list-disc pl-5 space-y-2 text-[14px]">
             <li>Базовая терминология и что такое крипта.</li>
             <li>Главная идея урока.</li>
@@ -226,7 +227,7 @@ export default function LessonPage() {
         />
       )}
       {tab === 'goodies' && (
-        <section className="glass p-4 rounded-2xl w-full">
+        <section className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${animateTab==='goodies' ? 'animate-[fadeIn_.3s_ease]' : ''}`}>
           {/* Заголовок */}
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[15px] font-semibold">📎 Полезное к уроку</div>
@@ -240,8 +241,15 @@ export default function LessonPage() {
             <div className="text-sm text-[var(--muted)]">Пока пусто. Загляните позже.</div>
           ) : (
             <div className="grid gap-2">
-              {(materials ?? []).map((m) => (
-                <div key={m.id} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)]">
+              {loadingMaterials && Array.from({length:3}).map((_,i)=>(
+                <div key={'sk'+i} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] overflow-hidden">
+                  <div className="h-4 w-40 rounded bg-[var(--surface-2)] shimmer mb-2" />
+                  <div className="h-3 w-full rounded bg-[var(--surface-2)] shimmer mb-1" />
+                  <div className="h-3 w-3/4 rounded bg-[var(--surface-2)] shimmer" />
+                </div>
+              ))}
+              {(materials ?? []).map((m, idx) => (
+                <div key={m.id} className={`rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] transition-all duration-300 ${idx%2?'translate-y-[0.5px]':''}`}>
                   {/* LINK */}
                   {m.kind === 'link' && (
                     <div className="flex items-start gap-3">

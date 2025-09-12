@@ -94,6 +94,12 @@ export default function HomeClient() {
   });
   const [allCompleted, setAllCompleted] = useState(false);
   const [progressLoaded, setProgressLoaded] = useState(false);
+  const [learningNow, setLearningNow] = useState<number>(() => {
+    const min = 50, max = 253;
+    const seed = Date.now();
+    const x = Math.abs(Math.sin(seed)) * (max - min) + min;
+    return Math.floor(x);
+  });
 
   // ✅ добавил флаг готовности auth, чтобы сначала получить JWT, а потом читать прогресс
   const [authReady, setAuthReady] = useState(false);
@@ -191,6 +197,21 @@ export default function HomeClient() {
     };
     void detect();
     return () => { cancelled = true; };
+  }, []);
+
+  // Динамический «Сейчас учатся N человек» — обновлять при каждом заходе/возврате
+  useEffect(() => {
+    const update = () => {
+      const min = 50, max = 253;
+      const seed = Date.now();
+      const x = Math.abs(Math.sin(seed)) * (max - min) + min;
+      setLearningNow(Math.floor(x));
+    };
+    update();
+    window.addEventListener('focus', update);
+    const onVis = () => document.visibilityState === 'visible' && update();
+    document.addEventListener('visibilitychange', onVis);
+    return () => { window.removeEventListener('focus', update); document.removeEventListener('visibilitychange', onVis); };
   }, []);
 
   /* уроки */
@@ -357,6 +378,10 @@ export default function HomeClient() {
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
         <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
+        <div className="mt-2 chip px-3 py-1.5 w-fit">
+          <span>👥</span>
+          <span className="text-xs">Сейчас учатся {learningNow} человек</span>
+        </div>
 
         <blockquote
           className="mt-2 rounded-xl border border-[var(--border)] p-3 text-[13px] italic text-[var(--muted)] w-full"

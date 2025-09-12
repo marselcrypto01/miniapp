@@ -106,6 +106,13 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
     const newAnswers = [...selectedAnswers];
     newAnswers[currentQuestion] = answerIndex;
     setSelectedAnswers(newAnswers);
+
+    // Haptic feedback: лёгкий отклик при выборе
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const h = (window as any)?.Telegram?.WebApp?.HapticFeedback;
+      h?.impactOccurred?.('light');
+    } catch {}
   };
 
   // Переход к следующему вопросу
@@ -158,6 +165,18 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
     try {
       const percentage = Math.round((correctAnswers / totalQuestions) * 100);
       recordTestPass({ lesson_id: lessonId, correct_answers: correctAnswers, total_questions: totalQuestions, percentage });
+    } catch {}
+
+    // Haptic feedback: success/error
+    try {
+      const percentage = Math.round((result.correctAnswers / totalQuestions) * 100);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const h = (window as any)?.Telegram?.WebApp?.HapticFeedback;
+      if (percentage >= 60) {
+        h?.notificationOccurred?.('success');
+      } else {
+        h?.notificationOccurred?.('error');
+      }
     } catch {}
   };
 

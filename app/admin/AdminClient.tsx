@@ -579,8 +579,8 @@ function MaterialsTab() {
         )}
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
-        <table className="w-full text-sm">
+      <div className="overflow-auto rounded-2xl border border-[var(--border)]">
+        <table className="min-w-[980px] w-full text-sm">
           <thead className="bg-[var(--surface-2)]">
             <tr className="[&>th]:text-left [&>th]:p-2">
               <th className="w-[64px]">#</th>
@@ -729,46 +729,11 @@ export default function AdminClient() {
       <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
         <div className={`${WRAP}`}>
           <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
-            <button
-              onClick={() => setTab('leads')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              📥 Лиды
-            </button>
-            <button
-              onClick={() => setTab('users')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              👥 Пользователи
-            </button>
-            <button
-              onClick={() => setTab('materials')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'materials' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              📎 Материалы
-            </button>
-            <button
-              onClick={() => setTab('tests')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'tests' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              🧪 Тесты
-            </button>
-            <button
-              onClick={() => setTab('settings')}
-              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
-                tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
-              }`}
-            >
-              ⚙️ Настройки
-            </button>
+            <button onClick={() => setTab('leads')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Лиды">📥</button>
+            <button onClick={() => setTab('users')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Пользователи">👥</button>
+            <button onClick={() => setTab('materials')}  className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'materials' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}  title="Материалы">📎</button>
+            <button onClick={() => setTab('tests')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'tests' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Тесты">🧪</button>
+            <button onClick={() => setTab('settings')}   className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}   title="Настройки">⚙️</button>
           </div>
         </div>
       </nav>

@@ -140,6 +140,28 @@ export default function LessonPage() {
   );
   const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
 
+  // Хелпер: форматируем текстовый материал (нумерованные пункты → список)
+  const renderTextContent = (text: string) => {
+    const lines = String(text).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const isNumbered = lines.every((l) => /^\d+\./.test(l));
+    if (isNumbered) {
+      return (
+        <ol className="list-decimal pl-5 space-y-2">
+          {lines.map((l, i) => (
+            <li key={i} className="leading-relaxed">{l.replace(/^\d+\.\s?/, '')}</li>
+          ))}
+        </ol>
+      );
+    }
+    return (
+      <div className="space-y-2">
+        {text.split(/\n{2,}/).map((p, i) => (
+          <p key={i} className="leading-relaxed">{p}</p>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <main className={`${WRAP} py-4`}>
       {/* Телеметрия (необязательно, но помогает админке видеть урок) */}
@@ -220,36 +242,48 @@ export default function LessonPage() {
             <div className="grid gap-2">
               {(materials ?? []).map((m) => (
                 <div key={m.id} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)]">
+                  {/* LINK */}
                   {m.kind === 'link' && (
-                    <a href={m.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 group">
+                    <div className="flex items-start gap-3">
                       <div className="mt-[2px]">🔗</div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold group-hover:underline break-words">{m.title}</div>
-                        <div className="text-xs text-[var(--muted)] break-words">{m.url}</div>
+                      <div className="min-w-0 w-full">
+                        <div className="text-sm font-semibold break-words">{m.title}</div>
+                        {m.description ? (
+                          <div className="text-xs text-[var(--muted)] mt-1 break-words leading-relaxed">{m.description}</div>
+                        ) : null}
+                        <a href={m.url} target="_blank" rel="noreferrer"
+                           className="inline-block mt-2 text-xs px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] break-all">
+                          {m.url}
+                        </a>
                       </div>
-                    </a>
+                    </div>
                   )}
+
+                  {/* IMAGE */}
                   {m.kind === 'image' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">🖼️</div>
                       <div className="min-w-0 w-full">
-                        <div className="text-sm font-semibold mb-1 break-words">{m.title}</div>
-                        <img src={m.url} alt={m.title} className="w-full rounded-lg border border-[var(--border)]" />
+                        <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
+                        <div className="rounded-xl overflow-hidden border border-[var(--border)]">
+                          <img src={m.url} alt={m.title} className="w-full block" />
+                        </div>
                         {m.description ? (
                           <div className="mt-2 text-xs text-[var(--muted)] whitespace-pre-wrap break-words leading-relaxed">{m.description}</div>
                         ) : null}
                       </div>
                     </div>
                   )}
+
+                  {/* TEXT */}
                   {m.kind === 'text' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">📝</div>
                       <div className="min-w-0 w-full">
                         <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
-                        <div className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-                          <div className="prose prose-invert max-w-none text-[13.5px] leading-relaxed whitespace-pre-wrap break-words">
-                            {m.url}
-                          </div>
+                        {/* Один аккуратный контейнер без «контейнер в контейнере» */}
+                        <div className="text-[13.5px] leading-relaxed">
+                          {renderTextContent(m.url)}
                         </div>
                       </div>
                     </div>

@@ -219,7 +219,7 @@ export default function LessonPage() {
           ) : (
             <div className="grid gap-2">
               {(materials ?? []).map((m) => (
-                <div key={m.id} className="rounded-xl border border-[var(--border)] p-3">
+                <div key={m.id} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)]">
                   {m.kind === 'link' && (
                     <a href={m.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 group">
                       <div className="mt-[2px]">🔗</div>
@@ -233,17 +233,24 @@ export default function LessonPage() {
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">🖼️</div>
                       <div className="min-w-0 w-full">
-                        <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
+                        <div className="text-sm font-semibold mb-1 break-words">{m.title}</div>
                         <img src={m.url} alt={m.title} className="w-full rounded-lg border border-[var(--border)]" />
+                        {m.description ? (
+                          <div className="mt-2 text-xs text-[var(--muted)] whitespace-pre-wrap break-words leading-relaxed">{m.description}</div>
+                        ) : null}
                       </div>
                     </div>
                   )}
                   {m.kind === 'text' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">📝</div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold mb-1 break-words">{m.title}</div>
-                        <div className="text-sm text-[var(--fg)] whitespace-pre-wrap break-words">{m.url}</div>
+                      <div className="min-w-0 w-full">
+                        <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
+                        <div className="p-3 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+                          <div className="prose prose-invert max-w-none text-[13.5px] leading-relaxed whitespace-pre-wrap break-words">
+                            {m.url}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

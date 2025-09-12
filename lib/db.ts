@@ -272,6 +272,7 @@ export type DbLessonMaterial = {
   url: string; // для kind='text' используем как content
   kind: 'link' | 'text' | 'image';
   position: number;
+  description?: string | null;
   created_at?: string;
 };
 
@@ -279,7 +280,7 @@ export type DbLessonMaterial = {
 export async function getLessonMaterials(lessonId: number): Promise<DbLessonMaterial[]> {
   const { data, error } = await sbPublic
     .from('lesson_materials')
-    .select('id,lesson_id,title,url,kind,position,created_at')
+    .select('id,lesson_id,title,url,kind,position,description,created_at')
     .eq('lesson_id', lessonId)
     .order('position', { ascending: true })
     .order('created_at', { ascending: true });
@@ -295,6 +296,7 @@ export async function adminUpsertMaterial(input: {
   url: string;
   kind: 'link' | 'text' | 'image';
   position?: number;
+  description?: string | null;
 }): Promise<DbLessonMaterial> {
   await ensureRealJwtAuth();
   const sb = await getClient();
@@ -307,12 +309,13 @@ export async function adminUpsertMaterial(input: {
     url: input.url,
     kind: input.kind,
     position: typeof input.position === 'number' ? input.position : 0,
+    description: input.description ?? null,
   } as any;
 
   const { data, error } = await sb
     .from('lesson_materials')
     .upsert(row)
-    .select('id,lesson_id,title,url,kind,position,created_at')
+    .select('id,lesson_id,title,url,kind,position,description,created_at')
     .single();
   if (error) throw error;
   return data as DbLessonMaterial;
@@ -335,4 +338,32 @@ export async function adminReorderMaterials(updates: Array<{ id: string; positio
   if (!sb || !authState?.clientId || !isJwtLike(authState.token)) throw new Error('auth_not_ready');
   const { error } = await sb.from('lesson_materials').upsert(updates as any);
   if (error) throw error;
+}
+
+/* ╔═══════════════════ ТЕСТЫ / АНАЛИТИКА ═══════════════════╗ */
+export async function recordTestPass(input: {
+  lesson_id: number;
+  correct_answers: number;
+  total_questions: number;
+  percentage: number;
+}): Promise<void> {
+  await ensureRealJwtAuth();
+  const sb = await getClient();
+  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+  const username = u?.username ?? null;
+  try {
+    await sb.from('user_events').insert({
+      client_id: authState.clientId,
+      username,
+      event: 'test_pass',
+      lesson_id: input.lesson_id,
+      meta: {
+        correct_answers: input.correct_answers,
+        total_questions: input.total_questions,
+        percentage: input.percentage,
+      },
+    });
+  } catch {}
 }

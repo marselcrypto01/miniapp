@@ -8,7 +8,7 @@ import { initSupabaseFromTelegram } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
-type TabKey = 'leads' | 'users' | 'materials' | 'settings';
+type TabKey = 'leads' | 'users' | 'materials' | 'tests' | 'settings';
 
 /* ───────── Проверка админа ───────── */
 function useIsAdmin() {
@@ -241,6 +241,70 @@ function LeadsTab() {
   );
 }
 
+/* ───────── Таб «Результаты тестов» ───────── */
+function TestsTab() {
+  const [rows, setRows] = useState<Array<{ username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const sb = getRlsClient();
+      const { data, error } = await sb
+        .from('user_events')
+        .select('username, lesson_id, meta, occurred_at')
+        .eq('event', 'test_pass')
+        .order('occurred_at', { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const mapped = (data ?? []).map((r: any) => ({
+        username: r.username || null,
+        lesson_id: r.lesson_id ?? null,
+        percentage: (r.meta?.percentage ?? null) as number | null,
+        occurred_at: r.occurred_at as string,
+      }));
+      setRows(mapped);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []); // eslint-disable-line
+
+  return (
+    <section className="space-y-3 w-full">
+      <div className="flex items-center justify-between">
+        <div className="text-lg font-bold">Результаты тестов</div>
+        <Btn variant="brand" onClick={load} disabled={loading}>{loading ? 'Обновляю…' : 'Обновить'}</Btn>
+      </div>
+
+      <div className="overflow-auto rounded-2xl border border-[var(--border)]">
+        <table className="min-w-[680px] w-full text-sm">
+          <thead className="bg-[var(--surface-2)]">
+            <tr className="[&>th]:text-left [&>th]:p-2">
+              <th>Юзернейм</th>
+              <th>Урок</th>
+              <th>%</th>
+              <th>Когда</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td className="p-3 text-center text-[var(--muted)]" colSpan={4}>Пока пусто</td></tr>
+            )}
+            {rows.map((r, i) => (
+              <tr key={i} className="border-t border-[var(--border)]">
+                <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : '—'}</td>
+                <td className="p-2">{r.lesson_id ?? '—'}</td>
+                <td className="p-2">{typeof r.percentage === 'number' ? `${r.percentage}%` : '—'}</td>
+                <td className="p-2">{new Date(r.occurred_at).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 /* ───────── Users: presence_live с «липкими» полями ───────── */
 
 type PresenceRow = {
@@ -418,8 +482,8 @@ function MaterialsTab() {
   const [lessonId, setLessonId] = useState<number>(1);
   const [items, setItems] = useState<DbLessonMaterial[]>([]);
   const [loading, setLoading] = useState(false);
-  const [form, setForm] = useState<{ id?: string; title: string; url: string; kind: 'link' | 'text' | 'image' }>(
-    { title: '', url: '', kind: 'link' }
+  const [form, setForm] = useState<{ id?: string; title: string; url: string; kind: 'link' | 'text' | 'image'; description?: string }>(
+    { title: '', url: '', kind: 'link', description: '' }
   );
 
   async function load() {
@@ -437,8 +501,8 @@ function MaterialsTab() {
     if (form.kind !== 'text' && !form.url.trim()) return alert('Введите ссылку/URL');
     setLoading(true);
     try {
-      await adminUpsertMaterial({ id: form.id, lesson_id: lessonId, title: form.title.trim(), url: form.url, kind: form.kind });
-      setForm({ title: '', url: '', kind: 'link' });
+      await adminUpsertMaterial({ id: form.id, lesson_id: lessonId, title: form.title.trim(), url: form.url, kind: form.kind, description: form.description });
+      setForm({ title: '', url: '', kind: 'link', description: '' });
       await load();
     } catch (e: any) {
       alert('Ошибка: ' + (e?.message || e));
@@ -452,7 +516,7 @@ function MaterialsTab() {
   }
 
   function edit(m: DbLessonMaterial) {
-    setForm({ id: m.id, title: m.title, url: m.url, kind: m.kind });
+    setForm({ id: m.id, title: m.title, url: m.url, kind: m.kind, description: m.description || '' });
   }
 
   return (
@@ -498,9 +562,20 @@ function MaterialsTab() {
             placeholder={form.kind === 'text' ? 'Вставьте текст заметки' : 'https://… или public URL картинки'}
           />
         </div>
+        {form.kind === 'image' && (
+          <div className="flex-1 min-w-[220px]">
+            <label className="text-xs text-[var(--muted)]">Описание (для картинок)</label>
+            <input
+              className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="Короткое описание изображения"
+            />
+          </div>
+        )}
         <Btn variant="brand" onClick={save} disabled={loading}>{form.id ? '💾 Обновить' : '➕ Добавить'}</Btn>
         {form.id && (
-          <Btn onClick={() => setForm({ title: '', url: '', kind: 'link' })}>Отмена</Btn>
+          <Btn onClick={() => setForm({ title: '', url: '', kind: 'link', description: '' })}>Отмена</Btn>
         )}
       </div>
 
@@ -512,6 +587,7 @@ function MaterialsTab() {
               <th>Заголовок</th>
               <th>Тип</th>
               <th>Ссылка/Текст</th>
+              <th>Описание</th>
               <th className="w-[150px]">Действия</th>
             </tr>
           </thead>
@@ -528,13 +604,14 @@ function MaterialsTab() {
                 <td className="p-2 text-xs text-[var(--muted)]">{idx + 1}</td>
                 <td className="p-2 font-medium">{m.title}</td>
                 <td className="p-2">{m.kind}</td>
-                <td className="p-2 break-words max-w-[520px]">
+                <td className="p-2 break-words max-w-[420px]">
                   {m.kind === 'text' ? (
                     <div className="text-[13px] whitespace-pre-wrap">{m.url}</div>
                   ) : (
                     <a href={m.url} target="_blank" rel="noreferrer" className="text-[13px] text-[var(--brand)] underline break-all">{m.url}</a>
                   )}
                 </td>
+                <td className="p-2 text-xs text-[var(--muted)] max-w-[260px] break-words">{m.description || '—'}</td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <Btn onClick={() => edit(m)} className="h-8">✏️</Btn>
@@ -645,6 +722,7 @@ export default function AdminClient() {
       {tab === 'leads' && <LeadsTab />}
       {tab === 'users' && <UsersTab />}
       {tab === 'materials' && <MaterialsTab />}
+      {tab === 'tests' && <TestsTab />}
       {tab === 'settings' && <SettingsEditor />}
 
       {/* Нижний таб-бар */}
@@ -674,6 +752,14 @@ export default function AdminClient() {
               }`}
             >
               📎 Материалы
+            </button>
+            <button
+              onClick={() => setTab('tests')}
+              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
+                tab === 'tests' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
+              }`}
+            >
+              🧪 Тесты
             </button>
             <button
               onClick={() => setTab('settings')}

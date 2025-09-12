@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { TestData, getTestData } from '@/lib/testData';
+import { recordTestPass } from '@/lib/db';
 
 interface TestResult {
   lessonId: number;
@@ -152,6 +153,12 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
     }
 
     onTestComplete?.(result);
+
+    // Отправим событие в БД (процент и детали)
+    try {
+      const percentage = Math.round((correctAnswers / totalQuestions) * 100);
+      recordTestPass({ lesson_id: lessonId, correct_answers: correctAnswers, total_questions: totalQuestions, percentage });
+    } catch {}
   };
 
   // Перезапуск теста

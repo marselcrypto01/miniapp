@@ -269,10 +269,10 @@ function TestsTab() {
         occurred_at: r.occurred_at as string,
       }));
 
-      // Fallback для username: берём последний из leads или lesson_progress
+      // Fallback для username: берём последний из leads, lesson_progress или presence_live
       const missingIds = Array.from(new Set(mapped.filter(r => !r.username && r.client_id).map(r => r.client_id as string)));
       if (missingIds.length) {
-        const [leadsRes, progRes] = await Promise.all([
+        const [leadsRes, progRes, presRes] = await Promise.all([
           sb.from('leads')
             .select('client_id, username, created_at')
             .in('client_id', missingIds)
@@ -283,6 +283,11 @@ function TestsTab() {
             .in('client_id', missingIds)
             .order('updated_at', { ascending: false })
             .limit(2000),
+          sb.from('presence_live')
+            .select('client_id, username, updated_at')
+            .in('client_id', missingIds)
+            .order('updated_at', { ascending: false })
+            .limit(5000),
         ]);
 
         const leadMap = new Map<string, string>();
@@ -297,10 +302,16 @@ function TestsTab() {
           if (!progMap.has(id) && r.username) progMap.set(id, String(r.username));
         });
 
+        const presMap = new Map<string, string>();
+        (presRes.data as any[] | null)?.forEach((r) => {
+          const id = String(r.client_id);
+          if (!presMap.has(id) && r.username) presMap.set(id, String(r.username));
+        });
+
         mapped = mapped.map((r) => {
           if (r.username) return r;
           const id = r.client_id ? String(r.client_id) : '';
-          const u = leadMap.get(id) || progMap.get(id) || null;
+          const u = leadMap.get(id) || progMap.get(id) || presMap.get(id) || null;
           return { ...r, username: u };
         });
       }
@@ -313,9 +324,9 @@ function TestsTab() {
 
   return (
     <section className="space-y-3 w-full">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="space-y-2">
         <div className="text-lg font-bold">Результаты тестов</div>
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 items-center">
           <select className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={lessonFilter} onChange={(e)=>setLessonFilter(e.target.value)}>
             <option value="all">Все уроки</option>
             <option value="1">Урок 1</option>
@@ -325,10 +336,10 @@ function TestsTab() {
             <option value="5">Урок 5</option>
             <option value="6">Урок 6</option>
           </select>
-          <input placeholder="Минимум %" className="h-9 w-28 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={minPct} onChange={(e)=>setMinPct(e.target.value.replace(/[^0-9]/g,''))} />
-          <input placeholder="Максимум %" className="h-9 w-28 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={maxPct} onChange={(e)=>setMaxPct(e.target.value.replace(/[^0-9]/g,''))} />
+          <input placeholder="Минимум %" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={minPct} onChange={(e)=>setMinPct(e.target.value.replace(/[^0-9]/g,''))} />
+          <input placeholder="Максимум %" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={maxPct} onChange={(e)=>setMaxPct(e.target.value.replace(/[^0-9]/g,''))} />
           <input type="date" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={since} onChange={(e)=>setSince(e.target.value)} />
-          <Btn variant="outline" onClick={load} disabled={loading}>↻</Btn>
+          <Btn variant="outline" onClick={load} disabled={loading}>↻ Обновить</Btn>
           <Btn variant="brand" onClick={()=>exportCsv()} disabled={rows.length===0}>⬇️ CSV</Btn>
         </div>
       </div>

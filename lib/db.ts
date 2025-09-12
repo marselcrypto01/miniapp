@@ -263,3 +263,76 @@ export async function createLead(input: { lead_type: 'consult' | 'course'; name?
   // необязательная аналитика
   try { await sb.from('user_events').insert({ client_id: authState.clientId, username, event: 'lead_submit' }); } catch {}
 }
+
+/* ╔═══════════════════ ПОЛЕЗНЫЕ МАТЕРИАЛЫ ═══════════════════╗ */
+export type DbLessonMaterial = {
+  id: string;
+  lesson_id: number;
+  title: string;
+  url: string; // для kind='text' используем как content
+  kind: 'link' | 'text' | 'image';
+  position: number;
+  created_at?: string;
+};
+
+/** Публичное чтение материалов по уроку (RLS: select allow all) */
+export async function getLessonMaterials(lessonId: number): Promise<DbLessonMaterial[]> {
+  const { data, error } = await sbPublic
+    .from('lesson_materials')
+    .select('id,lesson_id,title,url,kind,position,created_at')
+    .eq('lesson_id', lessonId)
+    .order('position', { ascending: true })
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DbLessonMaterial[];
+}
+
+/** Админ: создать/обновить материал. Требует admin app_role */
+export async function adminUpsertMaterial(input: {
+  id?: string;
+  lesson_id: number;
+  title: string;
+  url: string;
+  kind: 'link' | 'text' | 'image';
+  position?: number;
+}): Promise<DbLessonMaterial> {
+  await ensureRealJwtAuth();
+  const sb = await getClient();
+  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) throw new Error('auth_not_ready');
+
+  const row = {
+    id: input.id ?? undefined,
+    lesson_id: input.lesson_id,
+    title: input.title,
+    url: input.url,
+    kind: input.kind,
+    position: typeof input.position === 'number' ? input.position : 0,
+  } as any;
+
+  const { data, error } = await sb
+    .from('lesson_materials')
+    .upsert(row)
+    .select('id,lesson_id,title,url,kind,position,created_at')
+    .single();
+  if (error) throw error;
+  return data as DbLessonMaterial;
+}
+
+/** Админ: удалить материал */
+export async function adminDeleteMaterial(id: string): Promise<void> {
+  await ensureRealJwtAuth();
+  const sb = await getClient();
+  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) throw new Error('auth_not_ready');
+  const { error } = await sb.from('lesson_materials').delete().eq('id', id);
+  if (error) throw error;
+}
+
+/** Админ: массовое обновление позиций (reorder) */
+export async function adminReorderMaterials(updates: Array<{ id: string; position: number }>): Promise<void> {
+  if (!updates.length) return;
+  await ensureRealJwtAuth();
+  const sb = await getClient();
+  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) throw new Error('auth_not_ready');
+  const { error } = await sb.from('lesson_materials').upsert(updates as any);
+  if (error) throw error;
+}

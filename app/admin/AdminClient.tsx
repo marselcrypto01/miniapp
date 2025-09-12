@@ -8,7 +8,7 @@ import { initSupabaseFromTelegram } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
-type TabKey = 'leads' | 'users' | 'settings';
+type TabKey = 'leads' | 'users' | 'materials' | 'settings';
 
 /* ───────── Проверка админа ───────── */
 function useIsAdmin() {
@@ -411,6 +411,147 @@ function UsersTab() {
   );
 }
 
+/* ───────── Материалы уроков (CRUD) ───────── */
+import { getLessonMaterials, adminUpsertMaterial, adminDeleteMaterial, type DbLessonMaterial } from '@/lib/db';
+
+function MaterialsTab() {
+  const [lessonId, setLessonId] = useState<number>(1);
+  const [items, setItems] = useState<DbLessonMaterial[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState<{ id?: string; title: string; url: string; kind: 'link' | 'text' | 'image' }>(
+    { title: '', url: '', kind: 'link' }
+  );
+
+  async function load() {
+    setLoading(true);
+    try {
+      const data = await getLessonMaterials(lessonId);
+      setItems(data);
+    } finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [lessonId]); // eslint-disable-line
+
+  async function save() {
+    if (!form.title.trim()) return alert('Введите заголовок');
+    if (form.kind !== 'text' && !form.url.trim()) return alert('Введите ссылку/URL');
+    setLoading(true);
+    try {
+      await adminUpsertMaterial({ id: form.id, lesson_id: lessonId, title: form.title.trim(), url: form.url, kind: form.kind });
+      setForm({ title: '', url: '', kind: 'link' });
+      await load();
+    } catch (e: any) {
+      alert('Ошибка: ' + (e?.message || e));
+    } finally { setLoading(false); }
+  }
+
+  async function del(id: string) {
+    if (!confirm('Удалить материал?')) return;
+    setLoading(true);
+    try { await adminDeleteMaterial(id); await load(); } finally { setLoading(false); }
+  }
+
+  function edit(m: DbLessonMaterial) {
+    setForm({ id: m.id, title: m.title, url: m.url, kind: m.kind });
+  }
+
+  return (
+    <section className="space-y-3 w-full">
+      <div className="glass rounded-2xl p-3 flex flex-wrap gap-2 items-end">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-[var(--muted)]">Урок</label>
+          <input
+            type="number"
+            min={1}
+            className="h-10 w-[100px] rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            value={lessonId}
+            onChange={(e) => setLessonId(Number(e.target.value) || 1)}
+          />
+        </div>
+        <div className="flex-1 min-w-[220px]">
+          <label className="text-xs text-[var(--muted)]">Заголовок</label>
+          <input
+            className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            value={form.title}
+            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            placeholder="Напр.: Глоссарий новичка"
+          />
+        </div>
+        <div className="w-[160px]">
+          <label className="text-xs text-[var(--muted)]">Тип</label>
+          <select
+            className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            value={form.kind}
+            onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as any }))}
+          >
+            <option value="link">Ссылка</option>
+            <option value="image">Картинка</option>
+            <option value="text">Текст</option>
+          </select>
+        </div>
+        <div className="flex-1 min-w-[220px]">
+          <label className="text-xs text-[var(--muted)]">{form.kind === 'text' ? 'Текст' : 'URL'}</label>
+          <input
+            className="h-10 w-full rounded-xl px-3 bg-[var(--surface-2)] border border-[var(--border)] outline-none"
+            value={form.url}
+            onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+            placeholder={form.kind === 'text' ? 'Вставьте текст заметки' : 'https://… или public URL картинки'}
+          />
+        </div>
+        <Btn variant="brand" onClick={save} disabled={loading}>{form.id ? '💾 Обновить' : '➕ Добавить'}</Btn>
+        {form.id && (
+          <Btn onClick={() => setForm({ title: '', url: '', kind: 'link' })}>Отмена</Btn>
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-[var(--border)]">
+        <table className="w-full text-sm">
+          <thead className="bg-[var(--surface-2)]">
+            <tr className="[&>th]:text-left [&>th]:p-2">
+              <th className="w-[64px]">#</th>
+              <th>Заголовок</th>
+              <th>Тип</th>
+              <th>Ссылка/Текст</th>
+              <th className="w-[150px]">Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr>
+                <td className="p-3 text-center text-[var(--muted)]" colSpan={5}>
+                  Нет материалов для урока {lessonId}
+                </td>
+              </tr>
+            )}
+            {items.map((m, idx) => (
+              <tr key={m.id} className="border-t border-[var(--border)] align-top">
+                <td className="p-2 text-xs text-[var(--muted)]">{idx + 1}</td>
+                <td className="p-2 font-medium">{m.title}</td>
+                <td className="p-2">{m.kind}</td>
+                <td className="p-2 break-words max-w-[520px]">
+                  {m.kind === 'text' ? (
+                    <div className="text-[13px] whitespace-pre-wrap">{m.url}</div>
+                  ) : (
+                    <a href={m.url} target="_blank" rel="noreferrer" className="text-[13px] text-[var(--brand)] underline break-all">{m.url}</a>
+                  )}
+                </td>
+                <td className="p-2">
+                  <div className="flex gap-2">
+                    <Btn onClick={() => edit(m)} className="h-8">✏️</Btn>
+                    <Btn onClick={() => del(m.id)} className="h-8">🗑️</Btn>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-xs text-[var(--muted)]">Материалы читаются публично, изменения требуют админ-JWT из Telegram.</p>
+    </section>
+  );
+}
+
 /* ───────── Настройки (локально) ───────── */
 function SettingsEditor() {
   const [quotes, setQuotes] = useState<string[]>([]);
@@ -470,7 +611,7 @@ function SettingsEditor() {
 /* ───────── Страница админки ───────── */
 export default function AdminClient() {
   const { loading, allowed, username } = useIsAdmin();
-  const [tab, setTab] = useState<TabKey>('users');
+  const [tab, setTab] = useState<TabKey>('materials');
 
   if (loading) return null;
   if (!allowed) {
@@ -503,6 +644,7 @@ export default function AdminClient() {
 
       {tab === 'leads' && <LeadsTab />}
       {tab === 'users' && <UsersTab />}
+      {tab === 'materials' && <MaterialsTab />}
       {tab === 'settings' && <SettingsEditor />}
 
       {/* Нижний таб-бар */}
@@ -524,6 +666,14 @@ export default function AdminClient() {
               }`}
             >
               👥 Пользователи
+            </button>
+            <button
+              onClick={() => setTab('materials')}
+              className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${
+                tab === 'materials' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'
+              }`}
+            >
+              📎 Материалы
             </button>
             <button
               onClick={() => setTab('settings')}

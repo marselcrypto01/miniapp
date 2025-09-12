@@ -5,7 +5,7 @@ import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
 import TestComponent from '@/components/TestComponent';
-import { initSupabaseFromTelegram, saveUserProgress } from '@/lib/db';
+import { initSupabaseFromTelegram, saveUserProgress, getLessonMaterials, type DbLessonMaterial } from '@/lib/db';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 const CORE_LESSONS_COUNT = 5; // <= ограничение «Следующий» не идёт дальше 5
@@ -46,6 +46,8 @@ export default function LessonPage() {
   const [done, setDone] = React.useState<boolean>(false);
   const [progress, setProgress] = React.useState<Progress[]>([]);
   const [authReady, setAuthReady] = React.useState(false);
+  const [materials, setMaterials] = React.useState<DbLessonMaterial[] | null>(null);
+  const [loadingMaterials, setLoadingMaterials] = React.useState(false);
 
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
@@ -78,6 +80,23 @@ export default function LessonPage() {
       setProgress([]);
       setDone(false);
     }
+  }, [id]);
+
+  // Загружаем «Полезное» из Supabase
+  React.useEffect(() => {
+    let off = false;
+    (async () => {
+      setLoadingMaterials(true);
+      try {
+        const data = await getLessonMaterials(id);
+        if (!off) setMaterials(data);
+      } catch {
+        if (!off) setMaterials([]);
+      } finally {
+        if (!off) setLoadingMaterials(false);
+      }
+    })();
+    return () => { off = true; };
   }, [id]);
 
   // Обновить локальный и серверный прогресс
@@ -185,8 +204,53 @@ export default function LessonPage() {
         />
       )}
       {tab === 'goodies' && (
-        <section className="glass p-4 rounded-2xl w-full text-sm text-[var(--muted)]">
-          Подборка полезных материалов и ссылок по теме урока.
+        <section className="glass p-4 rounded-2xl w-full">
+          {/* Заголовок */}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-[15px] font-semibold">📎 Полезное к уроку</div>
+            {loadingMaterials ? (
+              <div className="text-xs text-[var(--muted)]">Загрузка…</div>
+            ) : null}
+          </div>
+
+          {/* Список материалов */}
+          {(!materials || materials.length === 0) && !loadingMaterials ? (
+            <div className="text-sm text-[var(--muted)]">Пока пусто. Загляните позже.</div>
+          ) : (
+            <div className="grid gap-2">
+              {(materials ?? []).map((m) => (
+                <div key={m.id} className="rounded-xl border border-[var(--border)] p-3">
+                  {m.kind === 'link' && (
+                    <a href={m.url} target="_blank" rel="noreferrer" className="flex items-start gap-3 group">
+                      <div className="mt-[2px]">🔗</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold group-hover:underline break-words">{m.title}</div>
+                        <div className="text-xs text-[var(--muted)] break-words">{m.url}</div>
+                      </div>
+                    </a>
+                  )}
+                  {m.kind === 'image' && (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-[2px]">🖼️</div>
+                      <div className="min-w-0 w-full">
+                        <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
+                        <img src={m.url} alt={m.title} className="w-full rounded-lg border border-[var(--border)]" />
+                      </div>
+                    </div>
+                  )}
+                  {m.kind === 'text' && (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-[2px]">📝</div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold mb-1 break-words">{m.title}</div>
+                        <div className="text-sm text-[var(--fg)] whitespace-pre-wrap break-words">{m.url}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 

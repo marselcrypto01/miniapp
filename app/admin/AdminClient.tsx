@@ -358,7 +358,7 @@ function TestsTab() {
               })
               .map((r, i) => (
               <tr key={i} className="border-t border-[var(--border)]">
-                <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : (r.client_id || '—')}</td>
+                <td className="p-2">{r.username ? `@${String(r.username).replace(/^@+/, '')}` : '—'}</td>
                 <td className="p-2">{r.lesson_id ?? '—'}</td>
                 <td className="p-2">{typeof r.percentage === 'number' ? `${r.percentage}%` : '—'}</td>
                 <td className="p-2">{new Date(r.occurred_at).toLocaleString()}</td>
@@ -552,7 +552,7 @@ function UsersTab() {
                 const isOnline = Date.now() - new Date(s.updated_at).getTime() < onlineThresholdMs;
                 return (
                   <tr key={(s.client_id || 'unknown') + '-' + s.updated_at} className="border-t border-[var(--border)]">
-                    <td className="px-2 py-2">{s.username ? `@${s.username.replace(/^@+/, '')}` : (s.client_id || '—')}</td>
+                    <td className="px-2 py-2">{s.username ? `@${s.username.replace(/^@+/, '')}` : '—'}</td>
                     <td className="px-2 py-2">{s.page || '—'}</td>
                     <td className="px-2 py-2">{s.activity || '—'}</td>
                     <td className="px-2 py-2">{s.lesson_id ?? '—'}</td>
@@ -828,12 +828,14 @@ export default function AdminClient() {
       {/* Нижний таб-бар */}
       <nav className="fixed left-0 right-0 bottom-0 z-50" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 8px)' }}>
         <div className={`${WRAP}`}>
-          <div className="glass rounded-2xl px-2 py-2 flex items-center justify-between">
-            <button onClick={() => setTab('leads')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Лиды">📥</button>
-            <button onClick={() => setTab('users')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Пользователи">👥</button>
-            <button onClick={() => setTab('materials')}  className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'materials' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}  title="Материалы">📎</button>
-            <button onClick={() => setTab('tests')}      className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'tests' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Тесты">🧪</button>
-            <button onClick={() => setTab('settings')}   className={`inline-flex flex-1 h-10 mx-1 items-center justify-center rounded-xl font-semibold ${tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}   title="Настройки">⚙️</button>
+          <div className="glass rounded-2xl px-2 py-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+              <button onClick={() => setTab('leads')}      className={`h-10 w-full rounded-xl font-semibold ${tab === 'leads' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Лиды">📥</button>
+              <button onClick={() => setTab('users')}      className={`h-10 w-full rounded-xl font-semibold ${tab === 'users' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Пользователи">👥</button>
+              <button onClick={() => setTab('materials')}  className={`h-10 w-full rounded-xl font-semibold ${tab === 'materials' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}  title="Материалы">📎</button>
+              <button onClick={() => setTab('tests')}      className={`h-10 w-full rounded-xl font-semibold ${tab === 'tests' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}      title="Тесты">🧪</button>
+              <button onClick={() => setTab('settings')}   className={`h-10 w-full rounded-xl font-semibold ${tab === 'settings' ? 'bg-[var(--brand)] text-black' : 'bg-[var(--surface-2)]'}`}   title="Настройки">⚙️</button>
+            </div>
           </div>
         </div>
       </nav>

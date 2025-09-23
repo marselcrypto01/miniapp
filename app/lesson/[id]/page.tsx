@@ -13,7 +13,7 @@ import {
 import VkVideo from '@/components/VkVideo';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
-const CORE_LESSONS_COUNT = 5; // <= ограничение «Следующий» не идёт дальше 5
+const CORE_LESSONS_COUNT = 5;
 
 type Tab = 'desc' | 'test' | 'goodies';
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
@@ -21,12 +21,12 @@ type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 const TITLES: Record<number, string> = {
   1: 'Крипта без сложных слов',
   2: 'Арбитраж: простой способ зарабатывать',
-  3: 'Риски и страхи: как не потерять на старте',
+  3: 'Риски и страхи: как купить свою первую крипту',
   4: '5 ошибок новичков, которые убивают заработок',
   5: 'Финал: твой первый шаг в мир крипты',
 };
 
-/** VK-видео (src именно из iframe, без тега <iframe>) */
+/** VK-видео */
 const VIDEO_SRC: Record<number, string> = {
   1: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239108&hd=4&hash=f7a8774a46c42003',
   2: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239109&hd=4&hash=6cf7acb62455397d',
@@ -35,7 +35,61 @@ const VIDEO_SRC: Record<number, string> = {
   5: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239112&hd=4&hash=70005799c7f09ad1',
 };
 
-/* === user-scoped localStorage namespace — как на главной === */
+/** Описания для каждого урока */
+const DESCRIPTIONS: Record<number, { intro: string; points: string[]; outro: string }> = {
+  1: {
+    intro: 'Что на самом деле скрывается за словом «крипта»? В этом видео ты узнаешь:',
+    points: [
+      '– зачем уже 400+ миллионов людей по всему миру используют крипту,',
+      '– как работает блокчейн простыми словами,',
+      '– какие монеты реально нужны новичку,',
+      '– и почему начать можно без миллиона на счету.',
+    ],
+    outro: '📌 Это первый шаг к тому, чтобы понять крипту и перестать бояться того, что тормозит 9 из 10 людей.',
+  },
+  2: {
+    intro: '«Заработок на крипте» звучит подозрительно? На деле есть способ, где ты не рискуешь, не торгуешь графики и не гадаешь на удачу. В этом видео разберём:',
+    points: [
+      '– как работает P2P-арбитраж простыми словами,',
+      '– почему деньги в сделке всегда защищены,',
+      '– откуда берётся прибыль, если «все такие умные»,',
+      '– и сколько реально может зарабатывать новичок.',
+    ],
+    outro: '📌 Это та часть крипты, которая не миф и не хайп, а нормальный инструмент для дополнительного дохода.',
+  },
+  3: {
+    intro: 'Боишься, что крипта незаконна, налоговая найдёт, а банк заморозит карту? Это типичные страхи новичков. Но правда в том, что 90% из них — мифы. В этом видео:',
+    points: [
+      '– почему P2P-арбитраж не нарушает закон,',
+      '– как банки реально относятся к переводам,',
+      '– что делать при заморозке карты,',
+      '– и как исключить риск «грязных переводов».',
+    ],
+    outro: '📌 Если знать правила игры, потерять деньги невозможно. Смотри, чтобы не бояться там, где нечего бояться.',
+  },
+  4: {
+    intro: 'Думаешь, купить крипту сложно и рискованно? На деле это проще, чем оплатить коммуналку в приложении банка. В этом видео:',
+    points: [
+      'ТОП-3 биржи, где новичку реально безопасно начать,',
+      '– как купить USDT прямо в Telegram за пару минут,',
+      '– зачем нужен USDT и что с ним можно делать,',
+      '– чек-лист ошибок, которые сливают деньги у новичков.',
+    ],
+    outro: '📌 Смотри до конца — после этого урока твой страх «я не разберусь» исчезнет.',
+  },
+  5: {
+    intro: 'Ты дошёл до финала курса. Большинство бросают на середине, а ты доказал себе, что можешь идти до конца. В этом видео:',
+    points: [
+      '– разбор, что реально изменилось у тебя после курса,',
+      '– почему первый шаг важнее суммы на старте,',
+      '– истории учеников, которые уже начали зарабатывать,',
+      '– главное — выбор, который ты сделаешь дальше.',
+    ],
+    outro: '📌 Этот урок — не теория. Это точка, где решается: останется ли крипта для тебя «интересной темой» или станет реальным источником дохода.',
+  },
+};
+
+/* === user-scoped localStorage === */
 function getTgIdSync(): string | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,15 +120,12 @@ export default function LessonPage() {
 
   const title = `Урок ${id}. ${TITLES[id] ?? 'Видео-урок'}`;
 
-  // Готовим tg-auth один раз, чтобы saveUserProgress имел client_id
   React.useEffect(() => {
     let off = false;
     (async () => {
       try {
         await initSupabaseFromTelegram();
-      } catch {
-        // тихо
-      } finally {
+      } catch {} finally {
         if (!off) setAuthReady(true);
       }
     })();
@@ -83,7 +134,6 @@ export default function LessonPage() {
     };
   }, []);
 
-  // Загружаем локальный (user-scoped) прогресс и статус текущего урока
   React.useEffect(() => {
     try {
       const raw = localStorage.getItem(ns('progress'));
@@ -97,7 +147,6 @@ export default function LessonPage() {
     }
   }, [id]);
 
-  // Загружаем «Полезное» из Supabase
   React.useEffect(() => {
     let off = false;
     (async () => {
@@ -111,10 +160,11 @@ export default function LessonPage() {
         if (!off) setLoadingMaterials(false);
       }
     })();
-    return () => { off = true; };
+    return () => {
+      off = true;
+    };
   }, [id]);
 
-  // Обновить локальный и серверный прогресс
   const persistProgress = async (arr: Progress[]) => {
     try {
       localStorage.setItem(ns('progress'), JSON.stringify(arr));
@@ -145,40 +195,16 @@ export default function LessonPage() {
   };
 
   const canGoPrev = id > 1;
-  const canGoNext = id < CORE_LESSONS_COUNT; // <- не даём уйти на 6-й
+  const canGoNext = id < CORE_LESSONS_COUNT;
 
-  // Для Presence — примерно посчитаем общий прогресс по CORE_LESSONS_COUNT
   const completedCount = React.useMemo(
     () => progress.filter((p) => p.status === 'completed' && p.lesson_id <= CORE_LESSONS_COUNT).length,
     [progress]
   );
   const coursePct = Math.min(100, Math.round((completedCount / CORE_LESSONS_COUNT) * 100));
 
-  // Хелпер: форматируем текстовый материал (нумерованные пункты → список)
-  const renderTextContent = (text: string) => {
-    const lines = String(text).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    const isNumbered = lines.every((l) => /^\d+\./.test(l));
-    if (isNumbered) {
-      return (
-        <ol className="list-decimal pl-5 space-y-2">
-          {lines.map((l, i) => (
-            <li key={i} className="leading-relaxed">{l.replace(/^\d+\.\s?/, '')}</li>
-          ))}
-        </ol>
-      );
-    }
-    return (
-      <div className="space-y-2">
-        {text.split(/\n{2,}/).map((p, i) => (
-          <p key={i} className="leading-relaxed">{p}</p>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <main className={`${WRAP} py-4`}>
-      {/* Телеметрия (необязательно, но помогает админке видеть урок) */}
       <PresenceClient page="lesson" activity={`Урок ${id}`} lessonId={id} progressPct={coursePct} />
 
       <header className="mb-3 w-full">
@@ -188,11 +214,11 @@ export default function LessonPage() {
 
       <section className="glass p-4 rounded-2xl mb-3 w-full">
         <div className="text-[15px] font-semibold mb-3">🎬 Видео-урок #{id}</div>
-        {/* ВСТАВЛЯЕМ ВК-ПЛЕЕР */}
-        <VkVideo src={VIDEO_SRC[id]} title={title} />
+        <div className="rounded-xl overflow-hidden border border-[var(--border)] bg-black">
+          <VkVideo src={VIDEO_SRC[id]} title={title} />
+        </div>
       </section>
 
-      {/* Табы: Описание / Тест / Полезное */}
       <div className="w-full mb-3">
         <div className="grid grid-cols-3 rounded-xl overflow-hidden border border-[var(--border)]">
           {[
@@ -218,17 +244,24 @@ export default function LessonPage() {
         </div>
       </div>
 
-      {/* Контент табов (пример) */}
       {tab === 'desc' && (
-        <section className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${animateTab==='desc' ? 'animate-[fadeIn_.3s_ease]' : ''}`}>
-          <ul className="list-disc pl-5 space-y-2 text-[14px]">
-            <li>Базовая терминология и что такое крипта.</li>
-            <li>Главная идея урока.</li>
-            <li>3–5 ключевых тезисов.</li>
-            <li>Что сделать после просмотра.</li>
-          </ul>
+        <section
+          className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${
+            animateTab === 'desc' ? 'animate-[fadeIn_.3s_ease]' : ''
+          }`}
+        >
+          <div className="space-y-3 text-[14px] leading-relaxed">
+            <p className="font-medium">{DESCRIPTIONS[id]?.intro}</p>
+            <ul className="list-disc pl-5 space-y-1">
+              {DESCRIPTIONS[id]?.points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
+            <p className="mt-3 italic text-[var(--muted)]">{DESCRIPTIONS[id]?.outro}</p>
+          </div>
         </section>
       )}
+
       {tab === 'test' && (
         <TestComponent
           lessonId={id}
@@ -237,9 +270,13 @@ export default function LessonPage() {
           }}
         />
       )}
+
       {tab === 'goodies' && (
-        <section className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${animateTab==='goodies' ? 'animate-[fadeIn_.3s_ease]' : ''}`}>
-          {/* Заголовок */}
+        <section
+          className={`glass p-4 rounded-2xl w-full transition-transform duration-300 ${
+            animateTab === 'goodies' ? 'animate-[fadeIn_.3s_ease]' : ''
+          }`}
+        >
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[15px] font-semibold">📎 Полезное к уроку</div>
             {loadingMaterials ? (
@@ -247,28 +284,26 @@ export default function LessonPage() {
             ) : null}
           </div>
 
-          {/* Список материалов */}
           {(!materials || materials.length === 0) && !loadingMaterials ? (
             <div className="text-sm text-[var(--muted)]">Пока пусто. Загляните позже.</div>
           ) : (
             <div className="grid gap-2">
-              {loadingMaterials && Array.from({ length: 3 }).map((_, i) => (
-                <div key={'sk' + i} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] overflow-hidden">
-                  <div className="h-4 w-40 rounded bg-[var(--surface-2)] shimmer mb-2" />
-                  <div className="h-3 w-full rounded bg-[var(--surface-2)] shimmer mb-1" />
-                  <div className="h-3 w-3/4 rounded bg-[var(--surface-2)] shimmer" />
-                </div>
-              ))}
               {(materials ?? []).map((m, idx) => (
-                <div key={m.id} className={`rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] transition-all duration-300 ${idx % 2 ? 'translate-y-[0.5px]' : ''}`}>
-                  {/* LINK */}
+                <div
+                  key={m.id}
+                  className={`rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] transition-all duration-300 ${
+                    idx % 2 ? 'translate-y-[0.5px]' : ''
+                  }`}
+                >
                   {m.kind === 'link' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">🔗</div>
                       <div className="min-w-0 w-full">
                         <div className="text-sm font-semibold break-words">{m.title}</div>
                         {m.description ? (
-                          <div className="text-xs text-[var(--muted)] mt-1 break-words leading-relaxed">{m.description}</div>
+                          <div className="text-xs text-[var(--muted)] mt-1 break-words leading-relaxed">
+                            {m.description}
+                          </div>
                         ) : null}
                         <a
                           href={m.url}
@@ -281,8 +316,6 @@ export default function LessonPage() {
                       </div>
                     </div>
                   )}
-
-                  {/* IMAGE */}
                   {m.kind === 'image' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">🖼️</div>
@@ -292,20 +325,20 @@ export default function LessonPage() {
                           <img src={m.url} alt={m.title} className="w-full block" />
                         </div>
                         {m.description ? (
-                          <div className="mt-2 text-xs text-[var(--muted)] whitespace-pre-wrap break-words leading-relaxed">{m.description}</div>
+                          <div className="mt-2 text-xs text-[var(--muted)] whitespace-pre-wrap break-words leading-relaxed">
+                            {m.description}
+                          </div>
                         ) : null}
                       </div>
                     </div>
                   )}
-
-                  {/* TEXT */}
                   {m.kind === 'text' && (
                     <div className="flex items-start gap-3">
                       <div className="mt-[2px]">📝</div>
                       <div className="min-w-0 w-full">
                         <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
-                        <div className="text-[13.5px] leading-relaxed">
-                          {renderTextContent(m.url)}
+                        <div className="text-[13.5px] leading-relaxed whitespace-pre-line">
+                          {m.url}
                         </div>
                       </div>
                     </div>
@@ -317,7 +350,6 @@ export default function LessonPage() {
         </section>
       )}
 
-      {/* Нижняя навигация: 4 одинаковые кнопки; «Следующий» заблокирован на 5-м */}
       <div className="mt-4 w-full grid grid-cols-2 min-[420px]:grid-cols-4 gap-2">
         <button
           onClick={() => canGoPrev && router.push(`/lesson/${id - 1}`)}
@@ -369,3 +401,4 @@ export default function LessonPage() {
     </main>
   );
 }
+

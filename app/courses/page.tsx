@@ -186,7 +186,10 @@ export default function CoursesPage() {
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <button
                       disabled={locked}
-                      onClick={() => openForm(key)}
+                      onClick={() => {
+                        (window as any).ym?.(104259406, 'reachGoal', 'course_click'); // 🎯 цель Метрики
+                        openForm(key);
+                      }}
                       className={`inline-flex h-11 w-full items-center justify-center rounded-xl font-semibold border
                         ${locked
                           ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
@@ -232,7 +235,10 @@ export default function CoursesPage() {
 
                   <button
                     disabled={locked}
-                    onClick={() => openForm(key)}
+                    onClick={() => {
+                      (window as any).ym?.(104259406, 'reachGoal', 'course_click'); // 🎯 цель Метрики
+                      openForm(key);
+                    }}
                     className={`inline-flex mt-1 h-11 w-full items-center justify-center rounded-xl font-semibold border
                       ${locked
                         ? 'opacity-60 cursor-not-allowed bg-[var(--surface)] border-[var(--border)]'
@@ -284,6 +290,9 @@ export default function CoursesPage() {
                 comment: [`Старт: ${payload.start}`, payload.comment].filter(Boolean).join(' | '),
                 message: msg,
               });
+
+              (window as any).ym?.(104259406, 'reachGoal', 'course_click'); // 🎯 цель при сабмите
+
               alert('✅ Заявка отправлена! Мы свяжемся в Telegram.');
               setFormOpen(null);
             } catch (e: any) {

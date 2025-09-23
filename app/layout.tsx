@@ -4,7 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
-import Script from 'next/script'; // ← ЭТО НУЖНО
+import Script from 'next/script'; // ← НУЖНО
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -26,14 +26,11 @@ const supabaseOrigin = (() => {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // Telegram WebView может добавлять style на <html>.
-    // suppressHydrationWarning устраняет mismatch при гидрации.
     <html lang="ru" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-        {/* DNS/TCP прогоны заранее — ускоряет мобильную сеть */}
         {supabaseOrigin ? (
           <>
             <link rel="preconnect" href={supabaseOrigin} crossOrigin="" />
@@ -41,35 +38,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </>
         ) : null}
 
-        {/* SDK Telegram — грузим ТОЛЬКО внутри Telegram WebView */}
+        {/* Telegram SDK — грузим только в Telegram WebView */}
         <Script id="tg-sdk-loader" strategy="afterInteractive">
           {`
             (function () {
               try {
                 var isTelegram = !!(window.Telegram && window.Telegram.WebApp);
-                // запасной признак: запуск из t.me/ или есть tgWebAppStartParam в URL/хэше
                 var sp  = new URLSearchParams(location.search);
                 var a1  = (sp.get('tgWebAppStartParam') || sp.get('startapp') || '').toLowerCase();
                 var hash = location.hash || '';
                 var a2 = '';
-                if (hash.startsWith('#')) { try { a2 = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch(e){} }
+                if (hash.startsWith('#')) {
+                  try { a2 = new URLSearchParams(hash.slice(1)).get('tgWebAppStartParam') || ''; } catch(e){}
+                }
                 var looksLikeTelegram = isTelegram || a1 || a2;
-
-                if (!looksLikeTelegram) return; // вне Telegram — не грузим SDK
+                if (!looksLikeTelegram) return;
 
                 var s = document.createElement('script');
                 s.src = 'https://telegram.org/js/telegram-web-app.js';
                 s.async = true;
-                s.onerror = function(){ /* молча игнорируем */ };
                 document.head.appendChild(s);
               } catch (e) {}
             })();
           `}
         </Script>
 
-
-
-        {/* ✅ Fallback: мягкая инициализация, если SDK долго грузится */}
+        {/* Fallback Telegram ready */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -83,14 +77,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     if (wa && typeof wa.ready === 'function') wa.ready();
                   } catch(e){}
                 }
-                // если SDK не инициализировался за 5 секунд — не стопорим UI
                 setTimeout(safeStart, 5000);
               })();
             `,
           }}
         />
 
-        {/* ✅ Мягкий автопереход в /admin (только для @marselv1 и если startapp=admin) */}
+        {/* Автопереход в /admin для marselv1 */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
@@ -100,7 +93,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     var sp  = new URLSearchParams(location.search);
                     var a1  = (sp.get('startapp') || '').toLowerCase();
                     var a2  = (sp.get('tgWebAppStartParam') || '').toLowerCase();
-
                     var hash = location.hash || '';
                     var h = '';
                     if (hash.startsWith('#')) {
@@ -125,8 +117,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         return;
                       }
                     } catch (e) {}
-
-                    if (++tries < 80) setTimeout(tick, 100); // ждём initData до ~8с
+                    if (++tries < 80) setTimeout(tick, 100);
                   }
                   tick();
                 } catch (e) {}
@@ -135,29 +126,64 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
 
-            <script
-      dangerouslySetInnerHTML={{
-        __html: `
-          (function () {
-            try {
-              var isTG = !!(window.Telegram && window.Telegram.WebApp) || /Telegram/i.test(navigator.userAgent || '');
-              if (!isTG) return;
+        {/* Cache-bust для Telegram */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var isTG = !!(window.Telegram && window.Telegram.WebApp) || /Telegram/i.test(navigator.userAgent || '');
+                  if (!isTG) return;
+                  var KEY = 'tg_cache_bust_done';
+                  if (sessionStorage.getItem(KEY) === '1') return;
+                  var url = new URL(location.href);
+                  if (!url.searchParams.has('v')) {
+                    url.searchParams.set('v', Date.now().toString(36));
+                    sessionStorage.setItem(KEY, '1');
+                    location.replace(url.toString());
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
 
-              var KEY = 'tg_cache_bust_done';
-              if (sessionStorage.getItem(KEY) === '1') return;
+        {/* ✅ Яндекс.Метрика (SPA) */}
+        <Script id="ym-loader" strategy="afterInteractive">
+          {`
+            (function(m,e,t,r,i,k,a){
+              m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+              m[i].l=1*new Date();
+              for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+              k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+            })(window, document,'script','https://mc.yandex.ru/metrika/tag.js','ym');
 
-              var url = new URL(location.href);
-              if (!url.searchParams.has('v')) {
-                url.searchParams.set('v', Date.now().toString(36));
-                sessionStorage.setItem(KEY, '1');
-                location.replace(url.toString());
-              }
-            } catch (e) {}
-          })();
-        `,
-      }}
-    />
-    
+            ym(104259406, 'init', {
+              ssr:true,
+              webvisor:true,
+              clickmap:true,
+              ecommerce:"dataLayer",
+              accurateTrackBounce:true,
+              trackLinks:true,
+              trackHash:true
+            });
+          `}
+        </Script>
+
+        {/* Helper для целей */}
+        <Script id="ym-goal-helper" strategy="afterInteractive">
+          {`
+            window.ymGoal = function(goal, params){
+              try { window.ym && ym(104259406, 'reachGoal', goal, params||{}); } catch(e){}
+            }
+          `}
+        </Script>
+
+        <noscript>
+          <div>
+            <img src="https://mc.yandex.ru/watch/104259406" style={{position:'absolute',left:'-9999px'}} alt="" />
+          </div>
+        </noscript>
       </head>
 
       <body
@@ -165,12 +191,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }}
         suppressHydrationWarning
       >
-        {/* Хартбит: пишет presence_live при заходе и каждые 30с */}
         <AppHeartbeat />
 
         {children}
 
-        {/* Нижняя навигация с запретом на неразрешённых страницах */}
         <BottomNavGuard />
       </body>
     </html>

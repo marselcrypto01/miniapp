@@ -374,7 +374,7 @@ export default function HomeClient() {
 
       {/* Шапка */}
       <header className="mb-5 w-full">
-        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Курс по заработку на крипте</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight leading-[1.1]">Бесплатный курс: крипта с нуля до первого заработка</h1>
         <div className="mt-2 h-[3px] w-24 rounded bg-[var(--brand)]" />
 
         <p className="mt-3 text-[13px] text-[var(--muted)]">Привет{firstName ? `, ${firstName}` : ''}!</p>
@@ -491,13 +491,19 @@ export default function HomeClient() {
               <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
               <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
               <button
-                className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                onClick={() => (allCompleted || points >= 500) && router.push('/bonus')}
-                disabled={!(allCompleted || points >= 500)}
-                title={(allCompleted || points >= 500) ? 'Открыть бонус' : 'Откроется после прохождения всех уроков или 500 очков'}
-              >
-                {(allCompleted || points >= 500) ? 'Открыть' : 'Откроется после курса/500 очков'}
-              </button>
+              className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
+              onClick={() => {
+                if (allCompleted || points >= 500) {
+                  (window as any).ym?.(104259406, 'reachGoal', 'bonus_click'); // 🎯 цель Метрики
+                  router.push('/bonus');
+                }
+              }}
+              disabled={!(allCompleted || points >= 500)}
+              title={(allCompleted || points >= 500) ? 'Открыть бонус' : 'Откроется после прохождения всех уроков или 500 очков'}
+            >
+              {(allCompleted || points >= 500) ? 'Открыть' : 'Откроется после курса/500 очков'}
+            </button>
+
             </div>
           </div>
         </div>

@@ -172,13 +172,17 @@ export default function ConsultPage() {
 
         <div className="mt-4">
           <button
-            className="btn-brand inline-flex h-11 min-w-36 items-center justify-center rounded-xl px-4 font-semibold"
-            onClick={handleSubmit}
-            disabled={loading}
-            title={loading ? 'Отправляем…' : 'Записаться'}
-          >
-            {loading ? 'Отправляем…' : 'Записаться'}
-          </button>
+          className="btn-brand inline-flex h-11 min-w-36 items-center justify-center rounded-xl px-4 font-semibold"
+          onClick={() => {
+            (window as any).ym?.(104259406, 'reachGoal', 'consult_click'); // 🎯 цель Метрики
+            handleSubmit();
+          }}
+          disabled={loading}
+          title={loading ? 'Отправляем…' : 'Записаться'}
+        >
+          {loading ? 'Отправляем…' : 'Записаться'}
+        </button>
+
         </div>
       </div>
 

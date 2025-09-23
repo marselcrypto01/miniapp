@@ -1,27 +1,34 @@
 // lib/admin.ts
 export const ADMIN_USERNAMES = [
-  'marselv1', // ← ВПИШИ свой username без @
+  'marselv1', // без "@", в нижнем регистре
 ];
 
-// Текущий username из Telegram WebApp или ?u=...
+export function normalizeUsername(u?: string | null) {
+  return (u || '').trim().replace(/^@/, '').toLowerCase();
+}
+
 export function getCurrentUsernameClient(): string | null {
   if (typeof window === 'undefined') return null;
-  const tg = (window as any)?.Telegram?.WebApp;
-  const fromTg = tg?.initDataUnsafe?.user?.username;
+  // Telegram WebApp
+  const wa = (window as any)?.Telegram?.WebApp;
+  const fromTg = wa?.initDataUnsafe?.user?.username as string | undefined;
   if (fromTg) return fromTg;
 
+  // Фолбэк: ?u=username
   const url = new URL(window.location.href);
   const u = url.searchParams.get('u');
   return u || null;
 }
 
-// Админ ли пользователь (в локалке: ?admin=1)
-export function isAdminClient(): boolean {
-  if (typeof window === 'undefined') return false;
-  const url = new URL(window.location.href);
-  if (url.searchParams.get('admin') === '1') return true;
+export function isAdminUsername(u?: string | null) {
+  const name = normalizeUsername(u);
+  if (!name) return false;
+  return ADMIN_USERNAMES.includes(name);
+}
 
-  const u = getCurrentUsernameClient();
-  if (!u) return false;
-  return ADMIN_USERNAMES.map((x) => x.toLowerCase()).includes(u.toLowerCase());
+// Для локалки/демо
+export function isDemoAdminParam(): boolean {
+  if (typeof window === 'undefined') return false;
+  const q = new URLSearchParams(location.search);
+  return q.get('demoAdmin') === '1' || q.get('admin') === '1';
 }

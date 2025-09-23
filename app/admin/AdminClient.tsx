@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import PresenceClient from '@/components/PresenceClient';
 import { createClient } from '@supabase/supabase-js';
 import { initSupabaseFromTelegram } from '@/lib/db';
+import { getCurrentUsernameClient, isAdminUsername, isDemoAdminParam } from '@/lib/admin';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 
@@ -21,20 +22,14 @@ function useIsAdmin() {
     let off = false;
     (async () => {
       try {
-        await initSupabaseFromTelegram().catch(() => {});
-        // Ждём SDK чуть дольше, чтобы не было ложных отказов на мобильной сети
-        for (let i = 0; i < 80; i++) {
-          const wa = (window as any)?.Telegram?.WebApp;
-          if (wa) {
-            const u = wa?.initDataUnsafe?.user;
-            const name = u?.username?.toLowerCase?.();
-            const demo = new URLSearchParams(location.search).get('demoAdmin') === '1';
-            if (!off) setSt({ loading: false, allowed: name === 'marselv1' || demo, username: u?.username });
-            return;
-          }
-          await new Promise((r) => setTimeout(r, 100));
-        }
-      } catch {}
+        const { role } = await initSupabaseFromTelegram().catch(() => ({ role: 'user' as const }));
+        const username = getCurrentUsernameClient();
+        const allowed = role === 'admin' || isAdminUsername(username) || isDemoAdminParam();
+        if (!off) setSt({ loading: false, allowed, username: username || undefined });
+        return;
+      } catch {
+        // ignore
+      }
       if (!off) setSt({ loading: false, allowed: false });
     })();
     return () => { off = true; };

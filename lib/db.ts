@@ -8,7 +8,7 @@ import { callTgAuth } from './tgAuth'; // наш быстрый гостевой
 const SUPABASE_URL  = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-/* ───────── Публичный клиент ───────── */
+/* ───────── Публичный клиент (без RLS, только public чтение/edge rpc) ───────── */
 const sbPublic = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { persistSession: false, autoRefreshToken: false },
   global: { headers: { apikey: SUPABASE_ANON } },
@@ -28,8 +28,7 @@ function loadAuth(): AuthCache | null {
     if (!raw) return null;
     const a = JSON.parse(raw) as AuthCache;
     if (!a?.token || !a?.clientId || !a?.exp) return null;
-    // игнорируем не-JWT (например, старый гостевой токен)
-    if (!isJwtLike(a.token)) return null;
+    if (!isJwtLike(a.token)) return null; // игнорируем старые «гостевые» токены
     if (Date.now() > a.exp * 1000) return null;
     return a;
   } catch { return null; }
@@ -107,8 +106,7 @@ export async function initSupabaseFromTelegram(): Promise<{ clientId: string; ro
     return { clientId: cached.clientId, role: cached.role };
   }
 
-  // 1) Если есть initData — делаем настоящий tg-auth (персонализация и привязка к пользователю)
-  //    Дождёмся появления initData до 4 секунд, чтобы не уйти в гостя раньше времени
+  // 1) Если есть initData — делаем настоящий tg-auth (персонализация)
   const initData = await waitForInitData(4000);
   if (initData) {
     try {
@@ -161,6 +159,44 @@ async function getClient(): Promise<SupabaseClient | null> {
 /* ───────── Геттеры состояния ───────── */
 export function getCurrentClientId(): string | null { return authState?.clientId ?? null; }
 export function getCurrentRole(): 'user' | 'admin' | null { return authState?.role ?? null; }
+
+/* ╔═══════════════════ ПОЛЕЗНЫЕ ХЕЛПЕРЫ ДЛЯ ГОСТЕЙ ═══════════════════╗ */
+
+// генератор guest-id
+function genId() {
+  try {
+    // @ts-ignore
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return 'guest-' + crypto.randomUUID();
+  } catch {}
+  return 'guest-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
+// получить/создать стабильный client_id в localStorage
+function getClientIdLocal(): string {
+  const KEY = 'cm_clientId';
+  try {
+    let v = localStorage.getItem(KEY);
+    if (!v) {
+      v = genId();
+      localStorage.setItem(KEY, v);
+    }
+    return v;
+  } catch {
+    return genId();
+  }
+}
+
+// попробовать вытащить @username из Telegram SDK (если внутри WebApp)
+function getUsernameFromTg(): string | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const wa: any = (window as any)?.Telegram?.WebApp;
+    const u = wa?.initDataUnsafe?.user?.username;
+    return u ? `@${String(u).replace(/^@+/, '')}` : null;
+  } catch {
+    return null;
+  }
+}
 
 /* ╔═══════════════════ ДАННЫЕ ═══════════════════╗ */
 
@@ -232,36 +268,84 @@ export async function writePresence(input: { page: string; activity?: string; le
   } catch {}
 }
 
-/* LEADS — оставляем неблокирующим (если нужно, вернём проверку initData) */
-export async function createLead(input: { lead_type: 'consult' | 'course'; name?: string; handle?: string; phone?: string; comment?: string; message?: string; }): Promise<void> {
-  // Пишем напрямую в таблицу через реальный RLS-JWT (не гость), чтобы сработали политики
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
-  const username = u?.username ?? null; // без '@'
+/* ╔═══════════════════ LEADS (с серверным fallback) ═══════════════════╗ */
+/**
+ * Универсальная отправка заявки: работает и внутри Telegram (есть JWT),
+ * и на обычном сайте (без Telegram) — через серверный API-роут.
+ */
+export async function createLead(input: {
+  lead_type: 'consult' | 'course';
+  name?: string;
+  handle?: string;
+  phone?: string;
+  comment?: string;
+  message?: string;
+}): Promise<void> {
+  // Пытаемся использовать реальный RLS-токен (если мы в Telegram)
+  // и только если это быстро доступно; в противном случае — API fallback.
+  let canUseRls = false;
+  try {
+    // если уже есть валидный jwt в кеше — ок
+    if (authState && isJwtLike(authState.token)) {
+      canUseRls = true;
+    } else {
+      // возможно, мы в WebApp — попробуем мгновенно обменять initData
+      const init = tryGetInitData();
+      if (init) {
+        const real = await exchangeInitDataToJwt(init);
+        authState = real;
+        saveAuth(real);
+        makeRlsClient(real.token);
+        canUseRls = true;
+      }
+    }
+  } catch { canUseRls = false; }
 
-  // Гарантируем реальный JWT. Если гость — пробуем обменять initData немедленно
-  await ensureRealJwtAuth();
-  let sb = await getClient();
-  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) {
-    throw new Error('auth_not_ready');
+  if (canUseRls) {
+    // RLS-вставка как раньше (сработают политики и username из TG)
+    const sb = await getClient();
+    if (!sb || !authState?.clientId) throw new Error('auth_not_ready');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+    const username = u?.username ?? null; // без '@'
+
+    const row = {
+      client_id: authState.clientId,
+      username,
+      lead_type: input.lead_type,
+      message: input.message ?? null,
+      name: input.name ?? null,
+      handle: input.handle ?? null,
+      phone: input.phone ?? null,
+      comment: input.comment ?? null,
+    };
+
+    const { error } = await sb.from('leads').insert(row);
+    if (error) throw error;
+
+    try { await sb.from('user_events').insert({ client_id: authState.clientId, username, event: 'lead_submit' }); } catch {}
+    return;
   }
 
-  const row = {
-    client_id: authState.clientId,
-    username,
-    lead_type: input.lead_type,
-    message: input.message ?? null,
-    name: input.name ?? null,
-    handle: input.handle ?? null,
-    phone: input.phone ?? null,
-    comment: input.comment ?? null,
-  };
+  // Fallback: обычный сайт (без Telegram) — отправляем на наш серверный роут
+  const client_id = getClientIdLocal();
+  const username = getUsernameFromTg() || null;
 
-  const { error } = await sb.from('leads').insert(row);
-  if (error) throw error;
+  const res = await fetch('/api/leads/submit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...input,
+      client_id,
+      username,
+    }),
+  });
 
-  // необязательная аналитика
-  try { await sb.from('user_events').insert({ client_id: authState.clientId, username, event: 'lead_submit' }); } catch {}
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.ok) {
+    throw new Error(json?.error || `lead_submit_failed_${res.status}`);
+  }
 }
 
 /* ╔═══════════════════ ПОЛЕЗНЫЕ МАТЕРИАЛЫ ═══════════════════╗ */

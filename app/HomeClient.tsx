@@ -572,7 +572,7 @@ export default function HomeClient() {
         </div>
       </section>
 
-      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">@your_bot</p>
+      <p className="mt-6 pb-24 text-center text-xs text-[var(--muted)]">КриптоМарс</p>
     </main>
   );
 }

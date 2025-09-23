@@ -1,6 +1,6 @@
 // lib/admin.ts
 export const ADMIN_USERNAMES = [
-  'your_username', // ← ВПИШИ свой username без @
+  'marselv1', // ← ВПИШИ свой username без @
 ];
 
 // Текущий username из Telegram WebApp или ?u=...

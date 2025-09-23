@@ -501,7 +501,7 @@ export default function HomeClient() {
               disabled={!(allCompleted || points >= 500)}
               title={(allCompleted || points >= 500) ? 'Открыть бонус' : 'Откроется после прохождения всех уроков или 500 очков'}
             >
-              {(allCompleted || points >= 500) ? 'Открыть' : 'Откроется после курса/500 очков'}
+              {(allCompleted || points >= 500) ? 'Открыть' : 'Доступно при достижении 500 очков'}
             </button>
 
             </div>

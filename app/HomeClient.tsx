@@ -478,17 +478,21 @@ export default function HomeClient() {
 
         {/* Бонус */}
         <h3 className="text-lg font-semibold mt-6">Бонус</h3>
-        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">Бонус откроется только после прохождения курса (секретный чек-лист банков, бирж)</p>
+        <p className="text-[12px] text-[var(--muted)] -mt-1 mb-3">
+          Бонус откроется только после прохождения курса (секретный чек-лист банков и бирж)
+        </p>
 
         <div className="w-full p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)]">
           <div className="grid grid-cols-[48px_1fr] gap-3 w-full">
-            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">📚</div>
+            <div className="h-12 w-12 grid place-items-center rounded-xl bg-[var(--bg)] border border-[var(--border)] text-xl">
+              📚
+            </div>
             <div className="w-full">
               <div className="text-[17px] font-semibold leading-tight">Дополнительные материалы</div>
               <div className="text-[12px] text-[var(--muted)] mt-1">Секретный чек-лист банков и бирж</div>
               <button
                 className="mt-3 w-full px-4 h-10 rounded-xl bg-[var(--brand)] text-black font-semibold active:translate-y-[1px]"
-                onClick={() => (allCompleted || points >= 500) && router.push('/lesson/6')}
+                onClick={() => (allCompleted || points >= 500) && router.push('/bonus')}
                 disabled={!(allCompleted || points >= 500)}
                 title={(allCompleted || points >= 500) ? 'Открыть бонус' : 'Откроется после прохождения всех уроков или 500 очков'}
               >

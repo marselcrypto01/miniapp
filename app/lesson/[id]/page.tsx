@@ -28,11 +28,11 @@ const TITLES: Record<number, string> = {
 
 /** VK-видео (src именно из iframe, без тега <iframe>) */
 const VIDEO_SRC: Record<number, string> = {
-  1: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239108&hd=4&hash=f7a8774a46c42003&autoplay=1',
-  2: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239109&hd=4&hash=6cf7acb62455397d&autoplay=1',
-  3: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239110&hd=4&hash=61fb46ca6efcd2ca&autoplay=1',
-  4: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239111&hd=4&hash=f886761db99c9539&autoplay=1',
-  5: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239112&hd=4&hash=70005799c7f09ad1&autoplay=1',
+  1: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239108&hd=4&hash=f7a8774a46c42003',
+  2: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239109&hd=4&hash=6cf7acb62455397d',
+  3: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239110&hd=4&hash=61fb46ca6efcd2ca',
+  4: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239111&hd=4&hash=f886761db99c9539',
+  5: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239112&hd=4&hash=70005799c7f09ad1',
 };
 
 /* === user-scoped localStorage namespace — как на главной === */

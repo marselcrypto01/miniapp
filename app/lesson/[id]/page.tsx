@@ -1,11 +1,16 @@
-// app/lesson/[id]/page.tsx
 'use client';
 
 import React from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import PresenceClient from '@/components/PresenceClient';
 import TestComponent from '@/components/TestComponent';
-import { initSupabaseFromTelegram, saveUserProgress, getLessonMaterials, type DbLessonMaterial } from '@/lib/db';
+import {
+  initSupabaseFromTelegram,
+  saveUserProgress,
+  getLessonMaterials,
+  type DbLessonMaterial,
+} from '@/lib/db';
+import VkVideo from '@/components/VkVideo';
 
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 const CORE_LESSONS_COUNT = 5; // <= ограничение «Следующий» не идёт дальше 5
@@ -19,6 +24,15 @@ const TITLES: Record<number, string> = {
   3: 'Риски и страхи: как не потерять на старте',
   4: '5 ошибок новичков, которые убивают заработок',
   5: 'Финал: твой первый шаг в мир крипты',
+};
+
+/** VK-видео (src именно из iframe, без тега <iframe>) */
+const VIDEO_SRC: Record<number, string> = {
+  1: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239108&hd=4&hash=f7a8774a46c42003&autoplay=1',
+  2: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239109&hd=4&hash=6cf7acb62455397d&autoplay=1',
+  3: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239110&hd=4&hash=61fb46ca6efcd2ca&autoplay=1',
+  4: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239111&hd=4&hash=f886761db99c9539&autoplay=1',
+  5: 'https://vkvideo.ru/video_ext.php?oid=-232370516&id=456239112&hd=4&hash=70005799c7f09ad1&autoplay=1',
 };
 
 /* === user-scoped localStorage namespace — как на главной === */
@@ -59,7 +73,7 @@ export default function LessonPage() {
       try {
         await initSupabaseFromTelegram();
       } catch {
-        // ничего — урок всё равно откроется, просто синк в БД может отложиться
+        // тихо
       } finally {
         if (!off) setAuthReady(true);
       }
@@ -105,7 +119,6 @@ export default function LessonPage() {
     try {
       localStorage.setItem(ns('progress'), JSON.stringify(arr));
     } catch {}
-    // Пытаемся сохранить в БД (если tg-auth готов). Ошибки — тихо.
     try {
       if (authReady) {
         await saveUserProgress(
@@ -175,9 +188,8 @@ export default function LessonPage() {
 
       <section className="glass p-4 rounded-2xl mb-3 w-full">
         <div className="text-[15px] font-semibold mb-3">🎬 Видео-урок #{id}</div>
-        <div className="h-44 rounded-xl border border-[var(--border)] grid place-items-center text-[var(--muted)] w-full">
-          Плеер (placeholder)
-        </div>
+        {/* ВСТАВЛЯЕМ ВК-ПЛЕЕР */}
+        <VkVideo src={VIDEO_SRC[id]} title={title} />
       </section>
 
       {/* Табы: Описание / Тест / Полезное */}
@@ -218,11 +230,10 @@ export default function LessonPage() {
         </section>
       )}
       {tab === 'test' && (
-        <TestComponent 
-          lessonId={id} 
+        <TestComponent
+          lessonId={id}
           onTestComplete={(result) => {
             console.log('Test completed:', result);
-            // Можно добавить дополнительную логику при завершении теста
           }}
         />
       )}
@@ -241,15 +252,15 @@ export default function LessonPage() {
             <div className="text-sm text-[var(--muted)]">Пока пусто. Загляните позже.</div>
           ) : (
             <div className="grid gap-2">
-              {loadingMaterials && Array.from({length:3}).map((_,i)=>(
-                <div key={'sk'+i} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] overflow-hidden">
+              {loadingMaterials && Array.from({ length: 3 }).map((_, i) => (
+                <div key={'sk' + i} className="rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] overflow-hidden">
                   <div className="h-4 w-40 rounded bg-[var(--surface-2)] shimmer mb-2" />
                   <div className="h-3 w-full rounded bg-[var(--surface-2)] shimmer mb-1" />
                   <div className="h-3 w-3/4 rounded bg-[var(--surface-2)] shimmer" />
                 </div>
               ))}
               {(materials ?? []).map((m, idx) => (
-                <div key={m.id} className={`rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] transition-all duration-300 ${idx%2?'translate-y-[0.5px]':''}`}>
+                <div key={m.id} className={`rounded-xl border border-[var(--border)] p-3 bg-[var(--surface)] transition-all duration-300 ${idx % 2 ? 'translate-y-[0.5px]' : ''}`}>
                   {/* LINK */}
                   {m.kind === 'link' && (
                     <div className="flex items-start gap-3">
@@ -259,8 +270,12 @@ export default function LessonPage() {
                         {m.description ? (
                           <div className="text-xs text-[var(--muted)] mt-1 break-words leading-relaxed">{m.description}</div>
                         ) : null}
-                        <a href={m.url} target="_blank" rel="noreferrer"
-                           className="inline-block mt-2 text-xs px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] break-all">
+                        <a
+                          href={m.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-block mt-2 text-xs px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] break-all"
+                        >
                           {m.url}
                         </a>
                       </div>
@@ -289,7 +304,6 @@ export default function LessonPage() {
                       <div className="mt-[2px]">📝</div>
                       <div className="min-w-0 w-full">
                         <div className="text-sm font-semibold mb-2 break-words">{m.title}</div>
-                        {/* Один аккуратный контейнер без «контейнер в контейнере» */}
                         <div className="text-[13.5px] leading-relaxed">
                           {renderTextContent(m.url)}
                         </div>

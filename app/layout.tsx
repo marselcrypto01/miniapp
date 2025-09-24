@@ -5,6 +5,7 @@ import './globals.css';
 import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
 import Script from 'next/script'; // ← НУЖНО
+import YandexMetrikaHit from '@/components/YandexMetrikaHit'; // ← ВАЖНО
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -187,11 +188,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
 
       <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-[var(--bg)] text-[var(--fg)] antialiased`}
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }}
+        className={`${geistSans.variable} ${geistMono.variable} ...`}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }} // ← не stlye
         suppressHydrationWarning
       >
         <AppHeartbeat />
+        
+        <YandexMetrikaHit />
 
         {children}
 

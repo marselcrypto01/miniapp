@@ -6,6 +6,8 @@ import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
 import Script from 'next/script'; // ← НУЖНО
 import YandexMetrikaHit from '@/components/YandexMetrikaHit'; // ← ВАЖНО
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });

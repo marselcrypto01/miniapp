@@ -10,9 +10,9 @@ const REQUIRED_POINTS = 500;
 
 /** ВСТАВЬ СВОИ РЕФ-ССЫЛКИ ЗДЕСЬ */
 const EXCHANGES: Array<{ label: string; href: string }> = [
-  { label: 'BingX', href: 'https://bingx.com/' },
-  { label: 'MEXC', href: 'https://www.mexc.com/' },
-  { label: 'Telegram Wallet (TON)', href: '' },
+  { label: 'Топ 1 - BingX', href: 'https://bingx.com/invite/N409JF/' },
+  { label: 'Топ 2 - MEXC', href: 'https://promote.mexc.com/r/6rVhxsI3' },
+  { label: 'Топ 3 - Bitget', href: 'https://share.bitget.com/u/G0H33NUE' },
 ];
 
 /* === user-scoped localStorage namespace — как на уроках === */

@@ -15,6 +15,13 @@ import VkVideo from '@/components/VkVideo';
 const WRAP = 'mx-auto max-w-[var(--content-max)] px-4';
 const CORE_LESSONS_COUNT = 5;
 
+/** ВСТАВЬ СВОИ РЕФ-ССЫЛКИ ЗДЕСЬ — для кнопок бирж в уроке 3 */
+const EXCHANGES: Array<{ label: string; href: string }> = [
+  { label: 'Топ 1 - BingX', href: 'https://bingx.com/invite/N409JF/' },
+  { label: 'Топ 2 - MEXC', href: 'https://promote.mexc.com/r/6rVhxsI3' },
+  { label: 'Топ 3 - Bitget', href: 'https://share.bitget.com/u/G0H33NUE' },
+];
+
 type Tab = 'desc' | 'test' | 'goodies';
 type Progress = { lesson_id: number; status: 'completed' | 'pending' };
 
@@ -283,6 +290,26 @@ export default function LessonPage() {
               <div className="text-xs text-[var(--muted)]">Загрузка…</div>
             ) : null}
           </div>
+
+          {/* Кнопки бирж — как в бонусах. Показываем первыми и только для урока 3 */}
+          {id === 3 ? (
+            <div className="mb-3">
+              <div className="text-[13px] text-[var(--muted)] mb-2">Рекомендованные биржи для старта:</div>
+              <div className="flex flex-wrap">
+                {EXCHANGES.map((x) => (
+                  <a
+                    key={x.label}
+                    href={x.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center px-2.5 py-1 rounded-full border border-[var(--border)] bg-[var(--bg)] text-[12px] mr-2 mb-2 hover:opacity-90 active:translate-y-[1px]"
+                  >
+                    {x.label} <span className="ml-1">↗</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {(!materials || materials.length === 0) && !loadingMaterials ? (
             <div className="text-sm text-[var(--muted)]">Пока пусто. Загляните позже.</div>

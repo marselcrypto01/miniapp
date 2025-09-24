@@ -4,8 +4,8 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import BottomNavGuard from '@/components/BottomNavGuard';
 import AppHeartbeat from '@/components/AppHeartbeat';
-import Script from 'next/script';
-import YandexMetrikaHit from '@/components/YandexMetrikaHit';
+import Script from 'next/script'; // ← НУЖНО
+import YandexMetrikaHit from '@/components/YandexMetrikaHit'; // ← ВАЖНО
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -152,24 +152,29 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           }}
         />
 
-        {/* --- Яндекс.Метрика --- */}
-        <Script
-          id="ym-loader"
-          src="https://mc.yandex.ru/metrika/tag.js"
-          strategy="afterInteractive"
-          onLoad={() => {
-            try {
-              // @ts-ignore
-              window.ym?.(104259406, 'init', {
-                clickmap: true,
-                trackLinks: true,
-                accurateTrackBounce: true,
-                webvisor: true,
-                trackHash: true,
-              });
-            } catch {}
-          }}
-        />
+        {/* ✅ Яндекс.Метрика (SPA) */}
+        <Script id="ym-loader" strategy="afterInteractive">
+          {`
+            (function(m,e,t,r,i,k,a){
+              m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+              m[i].l=1*new Date();
+              for (var j = 0; j < document.scripts.length; j++) { if (document.scripts[j].src === r) { return; } }
+              k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+            })(window, document, 'script', 'https://mc.yandex.ru/metrika/tag.js', 'ym');
+
+            ym(104259406, 'init', {
+              ssr:true,
+              webvisor:true,
+              clickmap:true,
+              ecommerce:"dataLayer",
+              accurateTrackBounce:true,
+              trackLinks:true,
+              trackHash:true
+            });
+          `}
+        </Script>
+
+        {/* Helper для целей */}
         <Script id="ym-goal-helper" strategy="afterInteractive">
           {`
             window.ymGoal = function(goal, params){
@@ -177,22 +182,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }
           `}
         </Script>
+
         <noscript>
           <div>
-            <img src="https://mc.yandex.ru/watch/104259406" style={{ position: 'absolute', left: '-9999px' }} alt="" />
+            <img
+              src="https://mc.yandex.ru/watch/104259406"
+              style={{ position: 'absolute', left: '-9999px' }}
+              alt=""
+            />
           </div>
         </noscript>
-        {/* --- /Яндекс.Метрика --- */}
       </head>
 
       <body
         className={`${geistSans.variable} ${geistMono.variable} min-h-screen bg-[var(--bg)] text-[var(--fg)] antialiased`}
+        /* ← не stlye */
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 80px)' }}
         suppressHydrationWarning
       >
         <AppHeartbeat />
-        <YandexMetrikaHit /> {/* SPA-хиты при навигации */}
+
+        <YandexMetrikaHit />
+
         {children}
+
         <BottomNavGuard />
       </body>
     </html>

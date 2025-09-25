@@ -14,8 +14,14 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Mini App',
-  description: 'Telegram Mini App',
+  title: 'Бесплатный курс: крипта с нуля до первого заработка.',
+  description:
+    'Бесплатный курс по криптовалюте: разберись в блокчейне, узнай про арбитраж, USDT и P2P. С нуля до первого заработка — просто и доступно каждому.',
+  icons: {
+    icon: '/logo.jpg',
+    shortcut: '/logo.jpg',
+    apple: '/logo.jpg',
+  },
 };
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';

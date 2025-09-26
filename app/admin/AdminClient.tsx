@@ -256,7 +256,11 @@ function TestsTab() {
         .eq('event', 'test_pass')
         .order('occurred_at', { ascending: false })
         .limit(500);
-      if (error) throw error;
+      if (error) {
+        console.error('Failed to load test results:', error);
+        throw error;
+      }
+      console.log('Loaded test results:', data?.length || 0, 'events');
       let mapped: Array<{ client_id: string | null; username: string | null; lesson_id: number | null; percentage: number | null; occurred_at: string }> = (data ?? []).map((r: any) => ({
         client_id: r.client_id || null,
         username: r.username || null,

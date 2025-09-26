@@ -453,26 +453,32 @@ export async function recordTestPass(input: {
       return; // Успешно записали через RLS
     }
   } catch {
-    // Если RLS не сработал, переходим к fallback
+    // Если RLS не сработал, переходим к API fallback
   }
 
-  // Fallback: используем публичный клиент с локальным client_id
+  // Fallback: используем API endpoint с service role
   try {
     const client_id = getClientIdLocal();
     const username = getUsernameFromTg();
     
-    await sbPublic.from('user_events').insert({
-      client_id,
-      username,
-      event: 'test_pass',
-      lesson_id: input.lesson_id,
-      meta: {
+    const res = await fetch('/api/events/test-pass', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id,
+        username,
+        lesson_id: input.lesson_id,
         correct_answers: input.correct_answers,
         total_questions: input.total_questions,
         percentage: input.percentage,
-      },
+      }),
     });
-  } catch {
-    // Если и это не сработало, игнорируем ошибку
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json?.ok) {
+      console.warn('Failed to record test pass via API:', json?.error);
+    }
+  } catch (e) {
+    console.warn('Failed to record test pass:', e);
   }
 }

@@ -164,8 +164,12 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
     // Отправим событие в БД (процент и детали)
     try {
       const percentage = Math.round((correctAnswers / totalQuestions) * 100);
-      recordTestPass({ lesson_id: lessonId, correct_answers: correctAnswers, total_questions: totalQuestions, percentage });
-    } catch {}
+      console.log('Recording test pass:', { lessonId, correctAnswers, totalQuestions, percentage });
+      await recordTestPass({ lesson_id: lessonId, correct_answers: correctAnswers, total_questions: totalQuestions, percentage });
+      console.log('Test pass recorded successfully');
+    } catch (e) {
+      console.error('Failed to record test pass:', e);
+    }
 
     // Haptic feedback: success/error
     try {

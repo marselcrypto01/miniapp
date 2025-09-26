@@ -377,7 +377,7 @@ export default function LessonPage() {
         </section>
       )}
 
-      <div className="mt-4 w-full grid grid-cols-2 min-[420px]:grid-cols-4 gap-2">
+      <div className="mt-4 w-full grid grid-cols-2 gap-2">
         <button
           onClick={() => canGoPrev && router.push(`/lesson/${id - 1}`)}
           disabled={!canGoPrev}

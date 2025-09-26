@@ -431,14 +431,15 @@ export async function recordTestPass(input: {
   total_questions: number;
   percentage: number;
 }): Promise<void> {
-  // Пытаемся использовать RLS-клиент с JWT токеном
   try {
+    // Пытаемся использовать RLS-клиент с JWT токеном
     await ensureRealJwtAuth();
     const sb = await getClient();
     if (sb && authState?.clientId && isJwtLike(authState.token)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
       const username = u?.username ?? null;
+      
       await sb.from('user_events').insert({
         client_id: authState.clientId,
         username,
@@ -453,32 +454,23 @@ export async function recordTestPass(input: {
       return; // Успешно записали через RLS
     }
   } catch {
-    // Если RLS не сработал, переходим к API fallback
+    // Если RLS не сработал, используем RPC функцию
   }
 
-  // Fallback: используем API endpoint с service role
+  // Fallback: используем RPC функцию через публичный клиент
   try {
     const client_id = getClientIdLocal();
     const username = getUsernameFromTg();
     
-    const res = await fetch('/api/events/test-pass', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id,
-        username,
-        lesson_id: input.lesson_id,
-        correct_answers: input.correct_answers,
-        total_questions: input.total_questions,
-        percentage: input.percentage,
-      }),
+    await sbPublic.rpc('record_test_pass', {
+      p_client_id: client_id,
+      p_lesson_id: input.lesson_id,
+      p_correct_answers: input.correct_answers,
+      p_total_questions: input.total_questions,
+      p_percentage: input.percentage,
+      p_username: username,
     });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json?.ok) {
-      console.warn('Failed to record test pass via API:', json?.error);
-    }
-  } catch (e) {
-    console.warn('Failed to record test pass:', e);
+  } catch {
+    // Игнорируем ошибки
   }
 }

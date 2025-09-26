@@ -431,15 +431,38 @@ export async function recordTestPass(input: {
   total_questions: number;
   percentage: number;
 }): Promise<void> {
-  await ensureRealJwtAuth();
-  const sb = await getClient();
-  if (!sb || !authState?.clientId || !isJwtLike(authState.token)) return;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
-  const username = u?.username ?? null;
+  // Пытаемся использовать RLS-клиент с JWT токеном
   try {
-    await sb.from('user_events').insert({
-      client_id: authState.clientId,
+    await ensureRealJwtAuth();
+    const sb = await getClient();
+    if (sb && authState?.clientId && isJwtLike(authState.token)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
+      const username = u?.username ?? null;
+      await sb.from('user_events').insert({
+        client_id: authState.clientId,
+        username,
+        event: 'test_pass',
+        lesson_id: input.lesson_id,
+        meta: {
+          correct_answers: input.correct_answers,
+          total_questions: input.total_questions,
+          percentage: input.percentage,
+        },
+      });
+      return; // Успешно записали через RLS
+    }
+  } catch {
+    // Если RLS не сработал, переходим к fallback
+  }
+
+  // Fallback: используем публичный клиент с локальным client_id
+  try {
+    const client_id = getClientIdLocal();
+    const username = getUsernameFromTg();
+    
+    await sbPublic.from('user_events').insert({
+      client_id,
       username,
       event: 'test_pass',
       lesson_id: input.lesson_id,
@@ -449,5 +472,7 @@ export async function recordTestPass(input: {
         percentage: input.percentage,
       },
     });
-  } catch {}
+  } catch {
+    // Если и это не сработало, игнорируем ошибку
+  }
 }

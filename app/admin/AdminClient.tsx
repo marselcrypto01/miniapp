@@ -244,6 +244,7 @@ function TestsTab() {
   const [minPct, setMinPct] = useState<string>('');
   const [maxPct, setMaxPct] = useState<string>('');
   const [since, setSince] = useState<string>('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   async function load() {
     setLoading(true);
@@ -312,15 +313,30 @@ function TestsTab() {
       }
 
       setRows(mapped);
+      setLastUpdated(new Date());
     } finally { setLoading(false); }
   }
 
-  useEffect(() => { load(); }, []); // eslint-disable-line
+  useEffect(() => { 
+    load(); 
+    
+    // Автоматическое обновление каждые 30 секунд
+    const interval = setInterval(load, 30000);
+    
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line
 
   return (
     <section className="space-y-3 w-full">
       <div className="space-y-2">
-        <div className="text-lg font-bold">Результаты тестов</div>
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-bold">Результаты тестов</div>
+          {lastUpdated && (
+            <div className="text-sm text-[var(--muted)]">
+              Обновлено: {lastUpdated.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 items-center">
           <select className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={lessonFilter} onChange={(e)=>setLessonFilter(e.target.value)}>
             <option value="all">Все уроки</option>
@@ -334,7 +350,9 @@ function TestsTab() {
           <input placeholder="Минимум %" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={minPct} onChange={(e)=>setMinPct(e.target.value.replace(/[^0-9]/g,''))} />
           <input placeholder="Максимум %" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={maxPct} onChange={(e)=>setMaxPct(e.target.value.replace(/[^0-9]/g,''))} />
           <input type="date" className="h-9 rounded-xl px-2 bg-[var(--surface-2)] border border-[var(--border)]" value={since} onChange={(e)=>setSince(e.target.value)} />
-          <Btn variant="outline" onClick={load} disabled={loading}>↻ Обновить</Btn>
+          <Btn variant="outline" onClick={load} disabled={loading}>
+            {loading ? '⏳ Загрузка...' : '↻ Обновить'}
+          </Btn>
           <Btn variant="brand" onClick={()=>exportCsv()} disabled={rows.length===0}>⬇️ CSV</Btn>
         </div>
       </div>

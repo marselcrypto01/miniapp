@@ -431,16 +431,33 @@ export async function recordTestPass(input: {
   total_questions: number;
   percentage: number;
 }): Promise<void> {
+  console.log('🎯 recordTestPass called with:', input);
+  
+  // Сначала пробуем RLS для авторизованных пользователей
   try {
-    // Пытаемся использовать RLS-клиент с JWT токеном
-    await ensureRealJwtAuth();
-    const sb = await getClient();
+    console.log('🔄 Checking if user is authenticated...');
+    
+    // Проверяем, есть ли уже готовый клиент
+    let sb = await getClient();
+    if (!sb) {
+      console.log('📝 No client yet, trying to initialize...');
+      try {
+        await ensureRealJwtAuth();
+        sb = await getClient();
+      } catch (authError) {
+        console.log('⚠️ Auth failed, will use RPC fallback:', authError);
+        throw authError;
+      }
+    }
+    
     if (sb && authState?.clientId && isJwtLike(authState.token)) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
       const username = u?.username ?? null;
       
-      await sb.from('user_events').insert({
+      console.log('📝 Using RLS with:', { clientId: authState.clientId, username });
+      
+      const { error } = await sb.from('user_events').insert({
         client_id: authState.clientId,
         username,
         event: 'test_pass',
@@ -451,18 +468,30 @@ export async function recordTestPass(input: {
           percentage: input.percentage,
         },
       });
-      return; // Успешно записали через RLS
+      
+      if (error) {
+        console.error('❌ RLS error:', error);
+        throw error; // Переходим к fallback
+      } else {
+        console.log('✅ RLS success');
+        return; // Успешно записали через RLS
+      }
+    } else {
+      console.log('⚠️ No valid auth state, using RPC fallback');
+      throw new Error('No valid auth state');
     }
-  } catch {
-    // Если RLS не сработал, используем RPC функцию
+  } catch (e) {
+    console.log('⚠️ RLS failed, trying RPC fallback:', e);
   }
 
-  // Fallback: используем RPC функцию через публичный клиент
+  // Fallback: используем RPC функцию для неавторизованных пользователей
   try {
     const client_id = getClientIdLocal();
     const username = getUsernameFromTg();
     
-    await sbPublic.rpc('record_test_pass', {
+    console.log('📝 Using RPC fallback with:', { client_id, username });
+    
+    const { data, error } = await sbPublic.rpc('record_test_pass', {
       p_client_id: client_id,
       p_lesson_id: input.lesson_id,
       p_correct_answers: input.correct_answers,
@@ -470,7 +499,33 @@ export async function recordTestPass(input: {
       p_percentage: input.percentage,
       p_username: username,
     });
-  } catch {
-    // Игнорируем ошибки
+    
+    if (error) {
+      console.error('❌ RPC error:', error);
+      
+      // Если RPC не работает, пробуем прямой insert через публичный клиент
+      console.log('🔄 Trying direct insert as last resort...');
+      const { error: insertError } = await sbPublic.from('user_events').insert({
+        client_id,
+        username,
+        event: 'test_pass',
+        lesson_id: input.lesson_id,
+        meta: {
+          correct_answers: input.correct_answers,
+          total_questions: input.total_questions,
+          percentage: input.percentage,
+        },
+      });
+      
+      if (insertError) {
+        console.error('❌ Direct insert error:', insertError);
+      } else {
+        console.log('✅ Direct insert success');
+      }
+    } else {
+      console.log('✅ RPC success:', data);
+    }
+  } catch (e) {
+    console.error('❌ RPC exception:', e);
   }
 }

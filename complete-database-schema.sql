@@ -361,6 +361,11 @@ create policy ue_insert on public.user_events
 for insert to anon, authenticated
 with check (true);
 
+-- Дополнительная политика для записи через публичный клиент
+create policy ue_insert_public on public.user_events
+for insert to anon
+with check (true);
+
 -- presence_live: RLS отключён (см. выше)
 
 -- =========================================================

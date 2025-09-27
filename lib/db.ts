@@ -431,21 +431,31 @@ export async function recordTestPass(input: {
   total_questions: number;
   percentage: number;
 }): Promise<void> {
-  console.log('🎯 recordTestPass called with:', input);
+  const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  
+  if (isDev) {
+    console.log('🎯 recordTestPass called with:', input);
+  }
   
   // Сначала пробуем RLS для авторизованных пользователей
   try {
-    console.log('🔄 Checking if user is authenticated...');
+    if (isDev) {
+      console.log('🔄 Checking if user is authenticated...');
+    }
     
     // Проверяем, есть ли уже готовый клиент
     let sb = await getClient();
     if (!sb) {
-      console.log('📝 No client yet, trying to initialize...');
+      if (isDev) {
+        console.log('📝 No client yet, trying to initialize...');
+      }
       try {
         await ensureRealJwtAuth();
         sb = await getClient();
       } catch (authError) {
-        console.log('⚠️ Auth failed, will use RPC fallback:', authError);
+        if (isDev) {
+          console.log('⚠️ Auth failed, will use RPC fallback:', authError);
+        }
         throw authError;
       }
     }
@@ -455,7 +465,9 @@ export async function recordTestPass(input: {
       const u: any = (window as any)?.Telegram?.WebApp?.initDataUnsafe?.user;
       const username = u?.username ?? null;
       
-      console.log('📝 Using RLS with:', { clientId: authState.clientId, username });
+      if (isDev) {
+        console.log('📝 Using RLS with:', { clientId: authState.clientId, username });
+      }
       
       const { error } = await sb.from('user_events').insert({
         client_id: authState.clientId,
@@ -470,18 +482,26 @@ export async function recordTestPass(input: {
       });
       
       if (error) {
-        console.error('❌ RLS error:', error);
+        if (isDev) {
+          console.error('❌ RLS error:', error);
+        }
         throw error; // Переходим к fallback
       } else {
-        console.log('✅ RLS success');
+        if (isDev) {
+          console.log('✅ RLS success');
+        }
         return; // Успешно записали через RLS
       }
     } else {
-      console.log('⚠️ No valid auth state, using RPC fallback');
+      if (isDev) {
+        console.log('⚠️ No valid auth state, using RPC fallback');
+      }
       throw new Error('No valid auth state');
     }
   } catch (e) {
-    console.log('⚠️ RLS failed, trying RPC fallback:', e);
+    if (isDev) {
+      console.log('⚠️ RLS failed, trying RPC fallback:', e);
+    }
   }
 
   // Fallback: используем RPC функцию для неавторизованных пользователей
@@ -489,7 +509,9 @@ export async function recordTestPass(input: {
     const client_id = getClientIdLocal();
     const username = getUsernameFromTg();
     
-    console.log('📝 Using RPC fallback with:', { client_id, username });
+    if (isDev) {
+      console.log('📝 Using RPC fallback with:', { client_id, username });
+    }
     
     const { data, error } = await sbPublic.rpc('record_test_pass', {
       p_client_id: client_id,
@@ -501,10 +523,14 @@ export async function recordTestPass(input: {
     });
     
     if (error) {
-      console.error('❌ RPC error:', error);
+      if (isDev) {
+        console.error('❌ RPC error:', error);
+      }
       
       // Если RPC не работает, пробуем прямой insert через публичный клиент
-      console.log('🔄 Trying direct insert as last resort...');
+      if (isDev) {
+        console.log('🔄 Trying direct insert as last resort...');
+      }
       const { error: insertError } = await sbPublic.from('user_events').insert({
         client_id,
         username,
@@ -518,14 +544,22 @@ export async function recordTestPass(input: {
       });
       
       if (insertError) {
-        console.error('❌ Direct insert error:', insertError);
+        if (isDev) {
+          console.error('❌ Direct insert error:', insertError);
+        }
       } else {
-        console.log('✅ Direct insert success');
+        if (isDev) {
+          console.log('✅ Direct insert success');
+        }
       }
     } else {
-      console.log('✅ RPC success:', data);
+      if (isDev) {
+        console.log('✅ RPC success:', data);
+      }
     }
   } catch (e) {
-    console.error('❌ RPC exception:', e);
+    if (isDev) {
+      console.error('❌ RPC exception:', e);
+    }
   }
 }

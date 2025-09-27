@@ -116,12 +116,12 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
   };
 
   // Переход к следующему вопросу
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentQuestion < (testData?.questions.length || 0) - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
       // Завершаем тест
-      finishTest();
+      await finishTest();
     }
   };
 
@@ -133,7 +133,7 @@ export default function TestComponent({ lessonId, onTestComplete }: TestComponen
   };
 
   // Завершение теста
-  const finishTest = () => {
+  const finishTest = async () => {
     if (!testData) return;
 
     const correctAnswers = testData.questions.reduce((count, question, index) => {
